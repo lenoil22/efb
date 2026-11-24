@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EFB Verbindungstest</title>
+<style>
+:root{--bg:#0d1520;--panel:#152233;--line:#24364d;--ink:#e6eef7;--dim:#8ea3bb;--ok:#3ddc84;--bad:#ff5c5c;--wait:#ffc940}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px max(4vw,16px)}
+h1{font-size:28px;margin:0 0 4px}
+p.sub{color:var(--dim);margin:0 0 20px}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+input{flex:1 1 220px;font-size:16px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button{font-size:16px;padding:12px 20px;border-radius:10px;border:0;background:#2f7de1;color:#fff;font-weight:600;min-height:44px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+.head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.name{font-weight:600}
+.st{font-weight:700;font-size:14px;padding:4px 10px;border-radius:99px;background:#0003}
+.st.ok{color:var(--ok)}.st.bad{color:var(--bad)}.st.wait{color:var(--wait)}
+pre{white-space:pre-wrap;word-break:break-word;color:var(--dim);font-size:13px;margin:10px 0 0}
+</style>
+</head>
+<body>
+<h1>Verbindungstest</h1>
+<p class="sub">Prüft, ob dein Bordcomputer von hier aus SimBrief, VATSIM und Wetterdaten erreicht.</p>
+<div class="row">
+  <input id="user" value="OnboardTransponder595" aria-label="SimBrief-Benutzername">
+  <input id="icao" value="EDDF" aria-label="Flughafen für METAR" style="flex:0 1 110px">
+  <button id="go">Testen</button>
+</div>
+<div id="out"></div>
+<script>
+{
+const out=document.getElementById('out');
+const tests=[
+  {id:'sb',name:'SimBrief (letzter Flugplan)',run:async()=>{
+    const u=encodeURIComponent(document.getElementById('user').value.trim());
+    const r=await fetch('https://www.simbrief.com/api/xml.fetcher.php?json=1&username='+u);
+    const j=await r.json();
+    if(j.fetch&&j.fetch.status&&j.fetch.status!=='Success')throw new Error(j.fetch.status);
+    return `${j.atc?.callsign||'?'}: ${j.origin?.icao_code} → ${j.destination?.icao_code}\nFL ${j.general?.initial_altitude}  ·  ${j.aircraft?.icaocode||''}\nRoute: ${j.general?.route||''}`;
+  }},
+  {id:'vs',name:'VATSIM-Datenfeed (Lotsen online)',run:async()=>{
+    const r=await fetch('https://data.vatsim.net/v3/vatsim-data.json');
+    const j=await r.json();
+    const c=j.controllers||[];
+    return `${c.length} Lotsen und ${(j.atis||[]).length} ATIS online, ${(j.pilots||[]).length} Piloten.\nBeispiele: ${c.slice(0,5).map(x=>x.callsign+' '+x.frequency).join(', ')}`;
+  }},
+  {id:'mv',name:'METAR über VATSIM',run:async()=>{
+    const r=await fetch('https://metar.vatsim.net/'+encodeURIComponent(document.getElementById('icao').value.trim()));
+    const t=(await r.text()).trim();
+    if(!t)throw new Error('leere Antwort');
+    return t;
+  }},
+  {id:'aw',name:'METAR über aviationweather.gov (Reserve)',run:async()=>{
+    const r=await fetch('https://aviationweather.gov/api/data/metar?format=json&ids='+encodeURIComponent(document.getElementById('icao').value.trim()));
+    const j=await r.json();
+    return j[0]?.rawOb||'keine Daten';
+  }}
+];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function card(t,state,label,text){
+  let el=document.getElementById(t.id);
+  if(!el){el=document.createElement('div');el.className='card';el.id=t.id;out.appendChild(el)}
+  el.innerHTML=`<div class="head"><span class="name">${esc(t.name)}</span><span class="st ${state}">${esc(label)}</span></div>${text?`<pre>${esc(text)}</pre>`:''}`;
+}
+async function runAll(){
+  for(const t of tests){
+    card(t,'wait','prüft …','');
+    try{card(t,'ok','OK',await t.run())}
+    catch(e){card(t,'bad','Fehler',(e&&e.message)||String(e))}
+  }
+}
+document.getElementById('go').addEventListener('click',runAll);
+runAll();
+}
+</script>
+</body>
+</html>
