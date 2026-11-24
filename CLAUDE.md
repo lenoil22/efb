@@ -14,7 +14,7 @@ Sprache mit dem Nutzer: **Deutsch**. UI-Texte Deutsch, Funk-Phraseologie und Cal
 - Tippen während des Flugs vermeiden → Chips/Auswahl statt Textfelder.
 
 ## Aktueller Stand
-- Eine Datei: `index.html` (HTML + CSS + JS, kein Build). Live über **GitHub Pages**: https://l1oxy.github.io/efb/
+- Eine Datei: `index.html` (HTML + CSS + JS, kein Build). Repo `lenoil22/efb`, live über **GitHub Pages**: https://lenoil22.github.io/efb/
 - Tabs: **Flug** (SimBrief-Import + Felder), **Funk**, **Checklisten**, **Wetter & Lotsen**. Einstellungen über Zahnrad oben rechts.
 - Zustand in `localStorage` unter `efb.v1` (Objekt `S`: user, f=Flug, phase, mem=gemerkte SIDs je Platz, ck, tab, req, sp, set=Einstellungen, g, x=durchgestrichene Zeilen).
 
