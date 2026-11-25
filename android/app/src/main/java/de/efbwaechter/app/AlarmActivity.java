@@ -16,6 +16,8 @@ import android.widget.TextView;
 /** Vollbild-Wecker (auch auf dem Sperrbildschirm). Klingelt, bis „Bin dran“ getippt wird. */
 public class AlarmActivity extends Activity {
     private TextView title, msg;
+    private LinearLayout replies;
+    private String from = "";
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -47,6 +49,19 @@ public class AlarmActivity extends Activity {
         LinearLayout.LayoutParams small = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(56));
         small.topMargin = dp(14);
         root.addView(mute, small);
+        // Lotsen-Nachricht: gleich hier antworten (Privatnachricht über vPilot)
+        replies = new LinearLayout(this);
+        replies.setOrientation(LinearLayout.VERTICAL);
+        TextView rt = text("ANTWORTEN", 13, Color.rgb(125, 142, 163), false);
+        replies.addView(rt, lp(dp(28), dp(4)));
+        for (String q : WatchService.QUICK) {
+            Button r = button(q, Color.rgb(24, 33, 45), Color.rgb(233, 238, 245), 16);
+            r.setOnClickListener(v -> { ActionReceiver.reply(this, from, q); WatchService s = WatchService.inst; if (s != null) s.stopRing(false); finish(); });
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+            rp.topMargin = dp(8);
+            replies.addView(r, rp);
+        }
+        root.addView(replies);
         setContentView(root);
         show(getIntent());
     }
@@ -64,6 +79,8 @@ public class AlarmActivity extends Activity {
     private void show(Intent i) {
         title.setText(i.getStringExtra("title"));
         msg.setText(i.getStringExtra("msg"));
+        from = i.getStringExtra("from"); if (from == null) from = "";
+        replies.setVisibility(from.isEmpty() ? android.view.View.GONE : android.view.View.VISIBLE);
     }
 
     private TextView text(String s, int sp, int color, boolean bold) {

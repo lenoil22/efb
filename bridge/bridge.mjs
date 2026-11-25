@@ -90,7 +90,7 @@ export function makeNtfy(cfg, fetchImpl = fetch) {
           let i; while ((i = buf.indexOf('\n')) >= 0) {
             const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
             if (!line) continue;
-            try { const m = JSON.parse(line); if (m.event === 'message' && m.message) onCmd(String(m.message).trim().toLowerCase()); } catch { }
+            try { const m = JSON.parse(line); if (m.event === 'message' && m.message) onCmd(String(m.message).trim()); } catch { }   // Groß/klein bleibt (Antworttexte)
           }
         }
       } catch (e) { if (signal?.aborted) return; }
@@ -105,24 +105,39 @@ export function makeNtfy(cfg, fetchImpl = fetch) {
    POST /cmd?k=<kanal>     → „weg“ / „da“
    UDP-Rundruf alle 2 s an Port lanBeaconPort, damit das Handy den PC findet (auch bei neuer IP).
    Schlüssel = ntfy-Kanal aus dem Koppeln; ohne ihn antwortet der Server nicht. */
-export function makeLan(cfg, { onCmd, listen = true } = {}) {
-  const clients = new Set(), key = cfg.topic;
-  let lastStatus = '';
+export function makeLan(cfg, { onCmd, onVpilot, getLogbook, listen = true } = {}) {
+  const clients = new Set(), key = cfg.topic, vpQueue = [];
+  let lastStatus = '', vpSeen = 0;
   const id = crypto.createHash('sha256').update(key).digest('hex').slice(0, 12);
   const srv = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
-    if (u.searchParams.get('k') !== key) { res.writeHead(403); res.end(); return; }
+    // vPilot-Plugin läuft auf demselben PC: /vpilot* von 127.0.0.1 auch ohne Schlüssel (das Plugin kennt den Kanal nicht)
+    const local = /^(::ffff:)?127\.0\.0\.1$|^::1$/.test(req.socket.remoteAddress || '') && u.pathname.startsWith('/vpilot');
+    if (!local && u.searchParams.get('k') !== key) { res.writeHead(403); res.end(); return; }
     if (req.method === 'GET' && u.pathname === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       res.write(': EFB Bridge\n\n'); clients.add(res);
       if (lastStatus) res.write(`event: status\ndata: ${lastStatus}\n\n`);
+      const lb = getLogbook?.(); if (lb) res.write(`event: logbook\ndata: ${JSON.stringify(lb)}\n\n`);
       log(`Handy per WLAN verbunden (${req.socket.remoteAddress?.replace('::ffff:', '')}).`);
       req.on('close', () => { clients.delete(res); log('Handy per WLAN getrennt.'); });
       return;
     }
     if (req.method === 'POST' && u.pathname === '/cmd') {
-      let b = ''; req.on('data', d => b += d); req.on('end', () => { const c = b.trim().toLowerCase(); if (c) onCmd?.(c); res.end('ok'); });
+      let b = ''; req.on('data', d => b += d); req.on('end', () => { const c = b.trim(); if (c) onCmd?.(c); res.end('ok'); });
       return;
+    }
+    /* vPilot-Plugin: meldet Ereignisse (POST /vpilot) und holt Befehle ab (GET /vpilot/cmds) */
+    if (req.method === 'POST' && u.pathname === '/vpilot') {
+      let b = ''; req.on('data', d => b += d); req.on('end', () => { try { onVpilot?.(JSON.parse(b)); } catch { } res.end('ok'); });
+      return;
+    }
+    if (req.method === 'GET' && u.pathname === '/vpilot/cmds') {
+      vpSeen = Date.now();
+      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(vpQueue.splice(0))); return;
+    }
+    if (req.method === 'GET' && u.pathname === '/logbook') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(getLogbook?.() || [])); return;
     }
     res.writeHead(404); res.end();
   });
@@ -153,6 +168,9 @@ export function makeLan(cfg, { onCmd, listen = true } = {}) {
     alarm: o => send('alarm', JSON.stringify(o)),
     status: s => { lastStatus = JSON.stringify(s); send('status', lastStatus); },
     live: o => { if (clients.size) send('live', JSON.stringify(o)); },
+    logbook: list => send('logbook', JSON.stringify(list)),
+    vpilot: c => { vpQueue.push(c); if (vpQueue.length > 20) vpQueue.shift(); },
+    vpilotOnline: () => Date.now() - vpSeen < 6000,
     count: () => clients.size,
     close: () => { timers.forEach(clearInterval); try { beacon?.close(); } catch { } srv.close(); for (const r of clients) r.end(); },
     server: srv
@@ -195,6 +213,10 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
     if (d.onGround != null) st.onGround = d.onGround === 1;
     if (d.paused != null) st.paused = d.paused !== 0;
     if (d.vs != null) st.vsFpm = Math.round(d.vs / 256 * 196.8504);
+    if (d.g != null) st.g = d.g / 624;
+    if (d.fuel != null) st.fuelLbs = d.fuel;
+    if (d.tdVs != null) st.tdVs = Math.round(d.tdVs / 256 * 196.8504);   // vom Sim beim Aufsetzen festgehalten
+    st.lastData = now(); st.crashSent = false;
   }
   function vars(d, names) {
     for (const [role, name] of Object.entries(names)) {
@@ -242,6 +264,11 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
         st.todSent = true;
       }
     }
+    // Absturz-Wächter: in der Luft, aber seit 20 s keine Daten mehr vom Sim (MSFS oder FSUIPC weg)
+    if (st.lastData != null && !st.onGround && !st.crashSent && t - st.lastData > 20000) {
+      notify({ kind: 'crash', title: 'Sim antwortet nicht mehr', message: `Seit ${Math.round((t - st.lastData) / 1000)} s keine Daten – MSFS abgestürzt oder FSUIPC beendet? Zuletzt ${Math.round(st.altFt / 100) * 100} ft.`, priority: 5, tags: ['rotating_light'] });
+      st.crashSent = true;
+    }
     // Weg-Modus
     if (st.away && !st.awaySent && t - st.awaySince >= cfg.awayMin * 60000) {
       notify({ kind: 'away', title: `Seit ${cfg.awayMin} min weg`, message: 'VATSIM erlaubt max. 30 min ohne Aufsicht. Zurück an den PC.', priority: 5, tags: ['alarm_clock'], back: true });
@@ -249,6 +276,7 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
     }
   }
   function cmd(c) {
+    c = String(c).trim().toLowerCase();
     if (['weg', 'away', 'w'].includes(c)) {
       st.away = true; st.awaySince = now(); st.awaySent = false;
       notify({ kind: 'info', title: 'Weg-Modus an', message: `Alarm in ${cfg.awayMin} min. Wenn du zurück bist: „Bin zurück“ tippen.`, priority: 2, tags: ['walking'], back: true });
@@ -279,15 +307,92 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
   return { st, offsets, vars, tick, cmd, setTod, sector };
 }
 
+/* ---------- Logbuch: Off-Block, Start, Landung (Aufsetzrate + G), On-Block ----------
+   update(st) jede Sekunde aufrufen. Aufsetzrate kommt aus dem Sim (FSUIPC 0x030C, beim Aufsetzen festgehalten),
+   G = höchster Wert in den 3 s nach dem Aufsetzen. Gespeichert in bridge/logbook.json. */
+export const grade = fpm => { const a = Math.abs(fpm); return a < 100 ? 'butterweich' : a < 240 ? 'gut' : a < 400 ? 'fest' : 'hart'; };
+export function makeLogbook({ file = path.join(DIR, 'logbook.json'), notify, now = () => Date.now(), plan = () => ({}), onChange } = {}) {
+  let list = [];
+  try { list = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { }
+  let f = null, wasGround = null, td = null, still = 0;
+  const save = () => { try { fs.writeFileSync(file, JSON.stringify(list, null, 1)); } catch { } onChange?.(list); };
+  const start = st => { const p = plan(); f = { id: now().toString(36), date: new Date(now()).toISOString(), cs: p.cs || '', type: p.type || '', dep: p.dep || '', arr: p.arr || '', offBlock: now(), fuelOutLbs: st.fuelLbs ?? null }; };
+  function update(st) {
+    if (st.lat == null || !st.simSeen) return;
+    const t = now(), g = !!st.onGround;
+    if (!f && g && st.gsKt > 3) start(st);                                  // rollt los → Off-Block
+    if (wasGround === true && !g && st.gsKt > 40) { if (!f) start(st); if (!f.takeoff) f.takeoff = t; }     // abgehoben
+    if (wasGround === false && g && f && f.takeoff && !td) td = { t, vs: st.tdVs ?? st.vsFpm ?? 0, g: st.g ?? 1, bounces: 0 };   // aufgesetzt
+    if (td && !f.landing) {
+      if (t - td.t <= 3500) {
+        td.g = Math.max(td.g, st.g ?? 1); if (st.tdVs != null) td.vs = st.tdVs;
+        if (!g && !td.air) { td.bounces++; td.air = true; } if (g) td.air = false;
+      }
+      else {
+        f.landing = td.t; f.fpm = -Math.abs(Math.round(td.vs)); f.g = Math.round(td.g * 100) / 100; f.bounces = td.bounces; f.grade = grade(f.fpm);
+        const ft = Math.round((f.landing - f.takeoff) / 60000);
+        notify({ kind: 'landing', title: `Gelandet${f.arr ? ' in ' + f.arr : ''} · ${f.fpm} fpm`, message: `${f.grade} · ${f.g.toFixed(2)} G${f.bounces ? ' · ' + f.bounces + '× gesprungen' : ''} · Flugzeit ${Math.floor(ft / 60)}:${String(ft % 60).padStart(2, '0')}`, priority: 3, tags: ['airplane_arriving'] });
+      }
+    }
+    if (f && f.landing) {                                                    // steht 30 s → On-Block, Flug speichern
+      still = st.gsKt < 1 ? (still || t) : 0;
+      if (still && t - still > 30000) { f.onBlock = t; f.fuelInLbs = st.fuelLbs ?? null; list.unshift(f); list = list.slice(0, 200); f = null; td = null; still = 0; save(); }
+    }
+    wasGround = g;
+  }
+  /* Bridge wird beendet: angefangenen Flug trotzdem sichern, wenn gelandet */
+  function flush() { if (f && f.landing) { f.onBlock = now(); list.unshift(f); f = null; save(); } }
+  return { update, flush, list: () => list, current: () => f };
+}
+
 /* ---------- SimBrief: TOD-Punkt aus dem letzten OFP ---------- */
 export async function loadTod(user, fetchImpl = fetch) {
   const j = await (await fetchImpl('https://www.simbrief.com/api/xml.fetcher.php?json=1&username=' + encodeURIComponent(user))).json();
   if (j.fetch?.status && j.fetch.status !== 'Success') throw new Error(j.fetch.status);
   let fx = j.navlog?.fix || []; if (!Array.isArray(fx)) fx = [fx];
   const t = fx.find(x => String(x.ident).toUpperCase() === 'TOD');
-  let cum = 0;
-  const wps = fx.map(x => { cum += +x.distance || 0; return x.pos_lat && x.type !== 'apt' ? [+x.pos_lat, +x.pos_long, x.ident, cum] : null; }).filter(Boolean);
-  return { flight: `${j.atc?.callsign || ''} ${j.origin?.icao_code || ''} → ${j.destination?.icao_code || ''}`.trim(), tod: t ? [+t.pos_lat, +t.pos_long] : null, wps };
+  let cum = 0, todCum = null;
+  const wps = fx.map(x => {
+    cum += +x.distance || 0; if (x === t) todCum = cum;
+    return x.pos_lat && x.type !== 'apt' ? [+x.pos_lat, +x.pos_long, x.ident, cum, x.fuel_plan_onboard != null ? +x.fuel_plan_onboard : null] : null;
+  }).filter(Boolean);
+  const g = j.general || {};
+  return {
+    flight: `${j.atc?.callsign || ''} ${j.origin?.icao_code || ''} → ${j.destination?.icao_code || ''}`.trim(), tod: t ? [+t.pos_lat, +t.pos_long] : null, wps,
+    total: cum || null, todCum, crz: +(g.initial_altitude || 0), arrElev: +(j.destination?.elevation || 0),
+    cs: (j.atc?.callsign || ((g.icao_airline || '') + (g.flight_number || ''))).toUpperCase(), type: j.aircraft?.icaocode || '',
+    dep: j.origin?.icao_code || '', arr: j.destination?.icao_code || '', units: String(j.params?.units || 'kgs').toLowerCase()
+  };
+}
+
+/* Rest entlang der Route (wie in der Handy-App): NM bis Ziel und bis TOD ab Position me */
+export function along(me, plan) {
+  const W = plan?.wps; if (!W?.length || !plan.total) return null;
+  let bi = 0, bd = 1e9; W.forEach((w, i) => { const d = nm(me[0], me[1], w[0], w[1]); if (d < bd) { bd = d; bi = i; } });
+  let nx = bi; if (bi < W.length - 1 && nm(me[0], me[1], W[bi + 1][0], W[bi + 1][1]) < nm(W[bi][0], W[bi][1], W[bi + 1][0], W[bi + 1][1])) nx = bi + 1;
+  const base = nm(me[0], me[1], W[nx][0], W[nx][1]) - W[nx][3];
+  const todCum = plan.todCum ?? (plan.crz ? plan.total - Math.max(0, (plan.crz - plan.arrElev) * 3 / 1000) : null);
+  return { dA: plan.total + base, dT: todCum != null ? todCum + base : null, passed: nx > 0 ? W[nx - 1] : null };
+}
+
+/* Fuel-Check gegen den SimBrief-Plan: am zuletzt überflogenen Wegpunkt; Warnung, wenn deutlich weniger an Bord */
+export function fuelCheck(st, plan) {
+  if (st.fuelLbs == null || st.onGround || st.lat == null) return null;
+  const a = along([st.lat, st.lon], plan); const wp = a?.passed; if (!wp || wp[4] == null) return null;
+  const kg = plan.units.startsWith('kg'), have = kg ? st.fuelLbs * 0.453592 : st.fuelLbs, want = wp[4];
+  const limit = Math.max(kg ? 500 : 1100, want * 0.08);
+  return { have: Math.round(have), want: Math.round(want), at: wp[2], low: have < want - limit, unit: kg ? 'kg' : 'lbs' };
+}
+
+/* ATIS am Ziel: Buchstabe, Pisten, QNH aus dem VATSIM-Feed */
+export function atisInfo(atisList, icao) {
+  icao = (icao || '').toUpperCase(); if (!icao) return null;
+  const a = atisList.find(x => x.callsign.split('_')[0] === icao && /_A_/.test(x.callsign)) || atisList.find(x => x.callsign.split('_')[0] === icao);
+  if (!a) return null;
+  const txt = (a.text_atis || []).join(' ');
+  const rws = [...new Set([...txt.matchAll(/(?:RUNWAY|RWY)S?\s*(?:IN USE\s*)?(?:FOR\s+(?:LANDING|ARRIVAL)S?\s*)?((?:\d{2}\s?[LRC]?\b(?:\s*(?:AND|,|\/)?\s*)?)+)/gi)].flatMap(m => [...m[1].matchAll(/\d{2}\s?[LRC]?/g)].map(r => r[0].replace(/\s/g, '').toUpperCase())))];
+  const q = txt.match(/QNH\s*(\d{3,4})/i) || txt.match(/\bQ(\d{4})\b/);
+  return { cs: a.callsign, code: a.atis_code || '', rws, qnh: q ? q[1] : '', freq: a.frequency };
 }
 
 /* ---------- Sektoren (VATSpy) + Online-Lotsen: „In X min neuer Lotse“ ----------
@@ -362,8 +467,12 @@ const OFFSETS = [
   { name: 'gs', address: 0x02B4, type: 'int', size: 4 },
   { name: 'onGround', address: 0x0366, type: 'uint', size: 2 },
   { name: 'paused', address: 0x0264, type: 'uint', size: 2 },
-  { name: 'vs', address: 0x02C8, type: 'int', size: 4 }        // Steigrate: m/s × 256
+  { name: 'vs', address: 0x02C8, type: 'int', size: 4 },       // Steigrate: m/s × 256
+  { name: 'tdVs', address: 0x030C, type: 'int', size: 4 },     // Steigrate beim Aufsetzen (vom Sim festgehalten)
+  { name: 'g', address: 0x11BA, type: 'int', size: 2 },        // G-Kraft × 624
+  { name: 'fuel', address: 0x126C, type: 'uint', size: 4 }     // Sprit gesamt in lbs
 ];
+const CTL = [{ name: 'pause', address: 0x0262, type: 'uint', size: 2 }];   // 1 = Pause an, 0 = aus (schreiben)
 export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
   let ws = null, names = null, declared = false, waitLogged = false, warned = false;
   const state = { ws: false, sim: false, fenix: false };
@@ -371,7 +480,7 @@ export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
   const send = o => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
   const cmds = {
     'offsets.declare': () => send({ command: 'offsets.declare', name: 'pos', offsets: OFFSETS }),
-    'offsets.read': () => send({ command: 'offsets.read', name: 'pos', interval: 1000 }),
+    'offsets.read': () => send({ command: 'offsets.read', name: 'pos', interval: 500 }),
     'vars.list': () => send({ command: 'vars.list', name: 'list', notify: 'auto' }),
     'vars.declare': () => send({ command: 'vars.declare', name: 'fenix', vars: Object.values(names).filter(Boolean).map(n => ({ name: n })) }),
     'vars.read': () => send({ command: 'vars.read', name: 'fenix', interval: 250 })
@@ -390,8 +499,8 @@ export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
     }
     switch (r.command) {
       case 'about.read': if (r.data) log(`FSUIPC ${r.data.FSUIPCVersion || '?'} · Server ${r.data.FSUIPCWebSocketServerVersion || '?'} · Sim ${r.data.isConnectionOpen ? 'verbunden' : 'noch nicht verbunden'}`); break;
-      case 'offsets.declare': cmds['offsets.read'](); break;
-      case 'offsets.read': if (r.data) {
+      case 'offsets.declare': if (r.name === 'pos') cmds['offsets.read'](); break;
+      case 'offsets.read': if (r.data && r.name === 'pos') {
         if (!state.sim) { send({ command: 'about.read', name: 'about' }); if (!declared) cmds['vars.list'](); }   // Sim gerade verbunden
         state.sim = true; if (waitLogged) { log('Sim verbunden.'); waitLogged = false; } mon.offsets(r.data);
       } break;
@@ -430,7 +539,14 @@ export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
     ws.onerror = () => { };
   }
   open();
-  return { state, close: () => ws?.close() };
+  /* Fernsteuerung: Sim pausieren / weiter (FSUIPC-Offset 0x0262) */
+  function pause(on) {
+    if (!state.sim) return false;
+    send({ command: 'offsets.declare', name: 'ctl', offsets: CTL });    // doppelt deklarieren ist harmlos (DuplicateName)
+    send({ command: 'offsets.write', name: 'ctl', offsets: [{ name: 'pause', value: on ? 1 : 0 }] });
+    return true;
+  }
+  return { state, pause, close: () => ws?.close() };
 }
 
 /* ---------- Start ---------- */
@@ -443,42 +559,111 @@ async function main() {
   } else log(`ntfy-Kanal: ${cfg.topic}`);
   if (cfg._new) log('NEU: Handy über „Handy koppeln“ (QR-Code) mit der App EFB Wächter verbinden.');
   const ntfy = makeNtfy(cfg);
-  let mon = null;
-  const lan = makeLan(cfg, { onCmd: c => { log('Befehl vom Handy (WLAN):', c); mon.cmd(c); } });
-  /* Jeder Alarm geht doppelt raus – WLAN direkt und ntfy – mit derselben ID; die App nimmt den ersten */
+  let mon = null, sim = null, plan = null, ctl = [], atisList = [];
+  const vp = { cs: '', connected: false };
+  /* Jeder Alarm geht doppelt raus – WLAN direkt und ntfy – mit derselben ID; die App nimmt den ersten.
+     from = Absender einer Lotsen-Nachricht (für „Antworten“ in der App) */
   const notify = n => {
     const aid = crypto.randomBytes(5).toString('hex');
-    lan.alarm({ aid, kind: n.kind || 'info', title: n.title, message: n.message, priority: n.priority || 3, t: Date.now() });
-    ntfy.send({ ...n, aid });
+    lan.alarm({ aid, kind: n.kind || 'info', title: n.title, message: n.message, priority: n.priority || 3, t: Date.now(), from: n.from || '' });
+    ntfy.send({ ...n, aid, tags: [...(n.tags || []), ...(n.from ? ['from-' + n.from] : [])] });
   };
+  /* Befehle vom Handy (WLAN, ntfy) und aus der Tray-App */
+  function handleCmd(raw) {
+    const c = String(raw).trim(), lc = c.toLowerCase();
+    log('Befehl:', c.length > 80 ? c.slice(0, 80) + '…' : c);
+    const needVp = () => { if (!lan.vpilotOnline()) notify({ kind: 'atis', title: 'vPilot-Plugin nicht verbunden', message: 'Läuft vPilot mit dem EFB-Plugin? Der Befehl wird gesendet, sobald es da ist.', priority: 3 }); };
+    if (['weg', 'w', 'away', 'da', 'd', 'back', 'zurück'].includes(lc)) mon.cmd(lc);
+    else if (lc === 'pause' || lc === 'resume' || lc === 'weiter') {
+      const on = lc === 'pause';
+      if (!sim.pause(on)) notify({ kind: 'atis', title: 'Pause geht gerade nicht', message: 'Der Sim ist nicht verbunden.', priority: 3 });
+      else log(on ? 'Sim pausiert (vom Handy).' : 'Sim läuft weiter (vom Handy).');
+    }
+    else if (lc === 'ident') { needVp(); lan.vpilot({ cmd: 'ident' }); }
+    else if (lc.startsWith('pm:')) {                       // pm:<an>:<text>
+      const rest = c.slice(3), i = rest.indexOf(':');
+      if (i > 0) { needVp(); lan.vpilot({ cmd: 'pm', to: rest.slice(0, i).trim().toUpperCase(), text: rest.slice(i + 1).trim().slice(0, 240) }); }
+    }
+    else if (lc.startsWith('atis:')) { const icao = c.slice(5).trim().toUpperCase(); needVp(); lan.vpilot({ cmd: 'atis', station: atisInfo(atisList, icao)?.cs || icao + '_ATIS' }); }
+    else if (lc.startsWith('metar:')) { needVp(); lan.vpilot({ cmd: 'metar', station: c.slice(6).trim().toUpperCase() }); }
+  }
+  /* Ereignisse vom vPilot-Plugin: Nachrichten, SELCAL, Verbindung, ATIS/METAR-Antworten */
+  function onVpilot(e) {
+    const me = (vp.cs || plan?.cs || '').toUpperCase();
+    if (e.type === 'connected') { vp.cs = String(e.callsign || ''); vp.connected = true; log(`vPilot verbunden als ${vp.cs}.`); }
+    else if (e.type === 'disconnected' || e.type === 'ended') {
+      // am Boden = meist selbst getrennt (am Gate) → kein Alarm; in der Luft = Verbindung weg oder vPilot zu
+      if (vp.connected && mon.st.onGround === false) notify({ kind: 'vatsim', title: e.type === 'ended' ? 'vPilot wurde beendet' : 'Von VATSIM getrennt', message: 'Du bist nicht mehr mit dem Netz verbunden. Neu verbinden, sonst bist du für die Lotsen weg.', priority: 5, tags: ['rotating_light'] });
+      if (vp.connected) log('vPilot getrennt.');
+      vp.connected = false;
+    }
+    else if (e.type === 'done' && e.cmd === 'pm') notify({ kind: 'atis', title: `Gesendet an ${e.to}`, message: String(e.text || ''), priority: 2 });
+    else if (e.type === 'done') log(`vPilot: ${e.cmd} ausgeführt.`);
+    else if (e.type === 'error') notify({ kind: 'atis', title: 'vPilot: hat nicht geklappt', message: String(e.message || ''), priority: 3 });
+    else if (e.type === 'pm') notify({ kind: 'contact', title: `Nachricht von ${e.from}`, message: String(e.message || ''), priority: 5, tags: ['speech_balloon'], from: e.from });
+    else if (e.type === 'radio' && me && String(e.message || '').toUpperCase().includes(me))
+      notify({ kind: 'contact', title: `Funk-Text von ${e.from}`, message: String(e.message || ''), priority: 5, tags: ['speech_balloon'], from: e.from });
+    else if (e.type === 'selcal') notify({ kind: 'contact', title: `SELCAL von ${e.from}`, message: 'Ein Lotse ruft dich per SELCAL.', priority: 5, tags: ['bell'], from: e.from });
+    else if (e.type === 'atis') notify({ kind: 'atis', title: `ATIS ${e.from}`, message: (e.lines || []).join(' '), priority: 3 });
+    else if (e.type === 'metar') notify({ kind: 'atis', title: 'METAR', message: String(e.metar || ''), priority: 3 });
+  }
+  const book = makeLogbook({ notify, plan: () => plan || {}, onChange: list => lan.logbook(list) });
+  const lan = makeLan(cfg, { onCmd: handleCmd, onVpilot, getLogbook: () => book.list() });
   mon = makeMonitor({ cfg, notify });
-  setInterval(mon.tick, 1000);
-  /* Live-Daten aus dem Sim jede Sekunde – nur über WLAN (ntfy hat ein Tageslimit) */
+  setInterval(() => { mon.tick(); book.update(mon.st); }, 1000);
+  /* Live-Daten aus dem Sim jede Sekunde – nur über WLAN (ntfy hat ein Tageslimit). Mit TOD/ETA entlang der Route. */
   setInterval(() => {
     const s = mon.st; if (s.lat == null) return;
-    lan.live({ lat: s.lat, lon: s.lon, alt: Math.round(s.altFt), gs: Math.round(s.gsKt), vs: s.vsFpm ?? null, gnd: s.onGround, paused: s.paused, ap: !!(s.ap1 || s.ap2), t: Date.now() });
+    const a = plan ? along([s.lat, s.lon], plan) : null, gs = s.gsKt;
+    const mins = d => d != null && gs > 80 ? Math.round(d / gs * 60) : null;
+    lan.live({ lat: s.lat, lon: s.lon, alt: Math.round(s.altFt), gs: Math.round(gs), vs: s.vsFpm ?? null, gnd: s.onGround, paused: s.paused, ap: !!(s.ap1 || s.ap2),
+      dA: a ? Math.round(a.dA) : null, etaMin: mins(a?.dA), todMin: a && a.dT > 1 ? mins(a.dT) : null, todNm: a && a.dT > 1 ? Math.round(a.dT) : null, t: Date.now() });
   }, 1000);
-  ntfy.listen(c => { log('Befehl vom Handy:', c); mon.cmd(c); });
-  /* Neuer Lotse voraus: Sektoren + Online-Lotsen (VATSIM, alle 60 s) + SimBrief-Route, Prüfung alle 30 s */
-  let route = null, ctl = [];
+  ntfy.listen(c => { log('Befehl vom Handy (ntfy):', c); handleCmd(c); });
+  /* Neuer Lotse voraus + ATIS am Ziel: Online-Lotsen und ATIS (VATSIM, alle 60 s), Prüfung alle 30 s */
   const sectors = makeSectors();
   sectors.load().then(() => log('Sektordaten (VATSpy) geladen.')).catch(e => log('Sektordaten nicht geladen:', e.message));
-  const pullCtl = async () => { try { const j = await (await fetch('https://data.vatsim.net/v3/vatsim-data.json')).json(); ctl = (j.controllers || []).filter(c => c.facility > 0 && c.frequency !== '199.998'); } catch { } };
+  let lastAtis = null;
+  const pullCtl = async () => {
+    try {
+      const j = await (await fetch('https://data.vatsim.net/v3/vatsim-data.json')).json();
+      ctl = (j.controllers || []).filter(c => c.facility > 0 && c.frequency !== '199.998'); atisList = j.atis || [];
+      const a = plan?.arr ? atisInfo(atisList, plan.arr) : null;      // ATIS am Ziel geändert?
+      if (a && a.code) {
+        if (lastAtis && lastAtis.code !== a.code) {
+          const rw = a.rws.join('/') !== lastAtis.rws.join('/') ? ` · Piste neu: ${a.rws.join(' / ')}` : a.rws.length ? ` · Piste ${a.rws.join(' / ')}` : '';
+          const q = a.qnh && a.qnh !== lastAtis.qnh ? ` · QNH ${a.qnh} (vorher ${lastAtis.qnh || '?'})` : a.qnh ? ` · QNH ${a.qnh}` : '';
+          notify({ kind: 'atis', title: `ATIS ${plan.arr}: ${a.code}`, message: `Neue Information ${a.code}${rw}${q}.`, priority: 3, tags: ['cloud'] });
+        }
+        lastAtis = a;
+      }
+    } catch { }
+  };
   pullCtl(); setInterval(pullCtl, 60000);
   setInterval(() => {
     if (!sectors.ok || mon.st.lat == null) return;
     const me = [mon.st.lat, mon.st.lon];
-    mon.sector({ cur: sectors.covers(me, ctl), next: sectors.next(me, route, ctl) });
+    mon.sector({ cur: sectors.covers(me, ctl), next: sectors.next(me, plan?.wps, ctl) });
   }, 30000);
+  /* Fuel-Check alle 60 s, Warnung höchstens alle 30 min */
+  let fuelWarned = 0;
+  setInterval(() => {
+    const f = plan ? fuelCheck(mon.st, plan) : null;
+    if (f?.low && Date.now() - fuelWarned > 30 * 60000) {
+      fuelWarned = Date.now();
+      notify({ kind: 'fuel', title: `Sprit unter Plan`, message: `${f.have} ${f.unit} an Bord, geplant ${f.want} ${f.unit} bei ${f.at}.`, priority: 4, tags: ['fuelpump'] });
+    }
+  }, 60000);
   if (cfg.simbriefUser) {
-    try { const s = await loadTod(cfg.simbriefUser); mon.setTod(s.tod); route = s.wps; log(`SimBrief: ${s.flight} · TOD ${s.tod ? 'gefunden' : 'nicht im OFP'} · ${s.wps.length} Wegpunkte`); }
+    try { plan = await loadTod(cfg.simbriefUser); mon.setTod(plan.tod); log(`SimBrief: ${plan.flight} · TOD ${plan.tod ? 'gefunden' : 'nicht im OFP'} · ${plan.wps.length} Wegpunkte`); }
     catch (e) { log('SimBrief nicht geladen:', e.message); }
   } else log('Kein SimBrief-Name in config.json – TOD-Alarm aus.');
-  const sim = connectSim(cfg, mon);
+  sim = connectSim(cfg, mon);
   notify({ kind: 'info', title: 'EFB Bridge läuft', message: 'Push kommt an. Warnungen aus dem Sim landen hier.', priority: 2, tags: ['white_check_mark'] });
   /* Status: für die Tray-App (EFB-Bridge.exe) als Zeile „@status {…}“, für die Handy-App über den Status-Kanal */
   let lastStatus = '', lastPub = '';
-  const pub = () => ({ on: true, ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, awaySince: mon.st.away ? mon.st.awaySince : 0, awayMin: cfg.awayMin, sb: cfg.simbriefUser || '' });
+  const pub = () => ({ on: true, ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, awaySince: mon.st.away ? mon.st.awaySince : 0, awayMin: cfg.awayMin, sb: cfg.simbriefUser || '',
+    paused: !!mon.st.paused, vp: lan.vpilotOnline(), vatsim: vp.connected, arr: plan?.arr || '' });
   setInterval(() => {
     const s = JSON.stringify({ ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, topic: cfg.topic });
     if (s !== lastStatus) { lastStatus = s; console.log('@status ' + s); }
@@ -487,6 +672,7 @@ async function main() {
     ntfy.status(p);
   }, 1000);
   const quit = async () => {             // Handy-App: „PC-Bridge aus“
+    book.flush();
     lan.status({ on: false, rx: Date.now() });
     try { await fetch(`${cfg.ntfyServer.replace(/\/$/, '')}/${cfg.topic}-status`, { method: 'POST', body: JSON.stringify({ on: false }), headers: { Priority: '1' }, signal: AbortSignal.timeout(2500) }); } catch { }
     process.exit(0);

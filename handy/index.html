@@ -125,15 +125,52 @@ button.it:active{opacity:.7}
 .opt.on{color:var(--cyan)}.opt svg{width:18px;height:18px;flex:none}
 .ok{color:var(--green)}.no{color:var(--amber)}
 /* Tab-Leiste: Material, Inhalt scrollt darunter */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(3,1fr);padding:8px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(10,14,19,.74);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border-top:1px solid var(--line)}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);padding:8px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(10,14,19,.74);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border-top:1px solid var(--line)}
 .tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:50px;justify-content:center;font-size:11px;font-weight:600;color:var(--t3)}
 .tab svg{width:24px;height:24px}
 .tab.on{color:var(--cyan)}
 .tab .badge{position:absolute;top:2px;left:calc(50% + 6px);min-width:17px;height:17px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;display:grid;place-items:center;padding:0 4px}
+/* Steuern (Fernbedienung) */
+.ctl{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:72px;padding:8px;border-radius:var(--r-md);background:var(--s2);font-size:14px;font-weight:600;text-align:center;transition:transform .1s ease-out}
+.cbtn:active{transform:scale(.97)}
+.cbtn svg{width:22px;height:22px;color:var(--cyan)}
+.cbtn small{font-size:11px;font-weight:500;color:var(--t3)}
+.cbtn.on{background:rgba(255,181,71,.14);color:var(--amber)}.cbtn.on svg{color:var(--amber)}
+.cbtn:disabled{opacity:.4}
+/* Verlauf: Nachrichtentext */
+.it .tx .msg{color:var(--t1);font-size:13px;margin-top:2px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.it.full .tx .msg{-webkit-line-clamp:unset;display:block}
+.it .tx .meta{font-size:11px;color:var(--t3);margin-top:2px}
+.rbtn{flex:none;min-height:36px;padding:0 12px;border-radius:99px;background:rgba(76,201,240,.14);color:var(--cyan);font-size:13px;font-weight:600}
+/* Antwort-Blatt */
+.scrim{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.55);animation:fade .18s ease-out}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;background:var(--s1);border-top:1px solid var(--line2);border-radius:var(--r-lg) var(--r-lg) 0 0;padding:10px 16px calc(18px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto;animation:up .26s cubic-bezier(.2,.9,.3,1)}
+.sheet .grab{width:38px;height:5px;border-radius:3px;background:var(--s3);margin:0 auto 14px}
+.sheet .said{background:var(--s2);border-radius:var(--r-md);padding:12px 14px;font:14px/1.5 var(--mono);margin:8px 0 14px;word-break:break-word}
+.qr{display:flex;align-items:center;width:100%;min-height:50px;padding:0 14px;border-radius:var(--r-sm);background:var(--s2);font-size:15px;font-weight:600;margin-top:8px;text-align:left}
+.qr:active{background:var(--s3)}
+@keyframes up{from{transform:translateY(100%)}}
+@keyframes fade{from{opacity:0}}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));z-index:40;transform:translateX(-50%);background:var(--s3);color:var(--t1);padding:10px 16px;border-radius:99px;font-size:14px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.4);animation:fade .15s ease-out;white-space:nowrap}
+/* Logbuch */
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--line);border-radius:var(--r-md);overflow:hidden}
+.sum div{background:var(--s1);padding:12px}
+.sum b{display:block;font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.06em}
+.sum span{display:block;font:700 22px/1.15 var(--mono);margin-top:4px;letter-spacing:-.02em}
+.fpm{flex:none;width:64px;text-align:center;font:700 17px/1.1 var(--mono);letter-spacing:-.02em}
+.fpm small{display:block;font:600 10px system-ui,sans-serif;letter-spacing:.02em;margin-top:2px}
+.g-butterweich{color:var(--green)}.g-gut{color:var(--cyan)}.g-fest{color:var(--amber)}.g-hart{color:var(--red)}
+.lbd{margin:0 0 10px 76px;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px;color:var(--t2)}
+.lbd em{font-style:normal;font-family:var(--mono);color:var(--t1)}
+.sw{position:relative;flex:none;width:50px;height:30px;border-radius:15px;background:var(--s3);transition:background .2s}
+.sw:after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .2s}
+.sw.on{background:var(--green)}.sw.on:after{transform:translateX(20px)}
 section{animation:in .18s ease-out}
 @keyframes in{from{opacity:0;transform:translateY(4px)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (prefers-reduced-transparency:reduce){.tabs{background:var(--bg);backdrop-filter:none}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:fade .15s ease-out!important}}
 </style>
 </head>
 <body>
@@ -151,6 +188,14 @@ section{animation:in .18s ease-out}
   <symbol id="i-pause" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6v12M15 6v12"/></g></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></g></symbol>
   <symbol id="i-link" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></g></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-fuel" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12M4 10h10"/><path d="M14 8h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V8l-3-3"/></g></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></g></symbol>
+  <symbol id="i-land" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="m4 11 1.5-.5 3 2.5 3.5-1-4-6 2-.6 6 5 4.3-1.2a1.6 1.6 0 0 1 .9 3.1L6 17.5 3 13z"/></g></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13a1 1 0 0 0 1.5.9l10-6.5a1 1 0 0 0 0-1.8l-10-6.5A1 1 0 0 0 8 5.5z"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17.5 19H7a5 5 0 1 1 1-9.9A6 6 0 0 1 19.6 11 4 4 0 0 1 17.5 19z"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></g></symbol>
+  <symbol id="i-sq" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M7 12h.01M11 12h.01M15 12h.01"/></g></symbol>
 </svg>
 
 <!-- ===================== FLUG ===================== -->
@@ -170,9 +215,17 @@ section{animation:in .18s ease-out}
     <div class="sec"><span class="eyebrow">Jetzt</span><span id="fdSrc"></span></div>
     <div class="card" id="fd"><p class="sub">Lädt …</p></div>
 
+    <div id="ctlWrap"></div>
+
     <div class="sec"><span class="eyebrow">Lotsen</span><span>VATSIM</span></div>
     <div class="card atc" id="atc"><p class="sub">Lädt …</p></div>
   </div>
+</section>
+
+<!-- ===================== FLÜGE (Logbuch) ===================== -->
+<section id="t-fluege" class="hide">
+  <div class="lt">Flüge</div>
+  <div id="lbBody"></div>
 </section>
 
 <!-- ===================== ALARME ===================== -->
@@ -190,6 +243,7 @@ section{animation:in .18s ease-out}
 
 <nav class="tabs" aria-label="Bereiche">
   <button class="tab on" data-tab="flug"><svg><use href="#i-plane"/></svg>Flug</button>
+  <button class="tab" data-tab="fluege"><svg><use href="#i-book"/></svg>Flüge</button>
   <button class="tab" data-tab="alarme"><svg><use href="#i-bell"/></svg>Alarme</button>
   <button class="tab" data-tab="verlauf"><svg><use href="#i-list"/></svg>Verlauf<i class="badge hide" id="badge"></i></button>
 </nav>
@@ -202,13 +256,20 @@ const APP=window.EFBApp||null;
 /* Alarmarten: Name, Symbol, Farbe, Gruppe */
 const KIND={tod:['Top of Descent','i-down','a','Flug'],sector:['Neuer Lotse voraus','i-radio','c','Flug'],away:['Weg-Modus abgelaufen','i-clock','n','Flug'],
   warning:['Master Warning','i-warn','r','Cockpit'],ap:['Autopilot aus','i-plane','r','Cockpit'],caution:['Master Caution','i-warn','a','Cockpit'],pause:['Sim pausiert','i-pause','n','Cockpit'],
+  fuel:['Sprit unter Plan','i-fuel','a','Flug'],landing:['Gelandet (Aufsetzrate)','i-land','g','Flug'],
+  crash:['Sim antwortet nicht','i-warn','r','Cockpit'],
+  contact:['Lotse schreibt dir','i-chat','c','VATSIM'],vatsim:['Von VATSIM getrennt','i-link','r','VATSIM'],atis:['ATIS & Rückmeldungen','i-cloud','n','VATSIM'],
   test:['Test vom PC','i-info','n','Sonstiges'],info:['Infos (Bridge gestartet …)','i-info','n','Sonstiges']};
-const SUBS={sector:'5 min vorher',away:'nach 25 min'};
+const SUBS={sector:'5 min vorher',away:'nach 25 min',fuel:'gegen SimBrief',crash:'in der Luft, 20 s keine Daten',contact:'Nachricht, SELCAL, Funk-Text an dich',vatsim:'nur in der Luft',atis:'neue ATIS am Ziel, Antworten'};
+/* Schnell-Antworten an den Lotsen (gleich wie in der App-Benachrichtigung) */
+const QUICK=['Roger','Back at the controls in 2 min','Wilco','Stand by, back in 5 min'];
 /* 2 = Wecker nur im Weg-Modus, sonst Nachricht (am PC hört man es ja selbst) */
 const MODES=[['Aus',''],['Nachricht','Banner und Ton'],['Wecker, wenn weg','sonst Nachricht'],['Immer Wecker','']];
 const NTFY='https://ntfy.sh';
-let S={topic:'',modes:{},history:[],status:null,connected:false,fsi:true,battery:true,notif:true,lan:false};
-let TAB=localStorage.getItem('efb.tab')||'flug',OPEN='';
+let S={topic:'',modes:{},history:[],status:null,connected:false,fsi:true,battery:true,notif:true,lan:false,logbook:[]};
+let TAB=localStorage.getItem('efb.tab')||'flug',OPEN='',LBOPEN='',SHEET=null,PAUSED=null,SND=null;
+const URGENT=['warning','crash','vatsim','ap'];
+const TABS=['flug','fluege','alarme','verlauf'];if(!TABS.includes(TAB))TAB='flug';
 
 /* ---------- Zustand: aus der App oder (Browser) aus ntfy ---------- */
 function load(){
@@ -229,12 +290,15 @@ function send(cmd){
   if(APP){APP.send(cmd);return}
   fetch(`${NTFY}/${encodeURIComponent(S.topic)}-cmd`,{method:'POST',body:cmd}).catch(()=>{});
 }
+let toastT=0;
+function toast(t){let el=$('#toast');if(!el){el=document.createElement('div');el.id='toast';el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}
+  el.textContent=t;el.classList.remove('hide');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.add('hide'),2200)}
 
 /* ---------- Anzeige ---------- */
 const hm=t=>new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
 const icon=(id,cls)=>`<span class="ic ${cls}"><svg><use href="#${id}"/></svg></span>`;
 function render(){
-  for(const t of['flug','alarme','verlauf']){$('#t-'+t).classList.toggle('hide',TAB!==t);document.querySelector(`[data-tab="${t}"]`).classList.toggle('on',TAB===t)}
+  for(const t of TABS){$('#t-'+t).classList.toggle('hide',TAB!==t);document.querySelector(`[data-tab="${t}"]`).classList.toggle('on',TAB===t)}
   $('#setup').classList.toggle('hide',!!S.topic);
   $('#main').classList.toggle('hide',!S.topic);
   const st=S.status||{},pcOn=!!st.on&&S.connected!==false;
@@ -257,21 +321,39 @@ function render(){
     $('#awayCard').innerHTML=`<div class="card"><button class="cta go" data-cmd="weg" ${pcOn?'':'disabled'}><svg><use href="#i-walk"/></svg>Ich bin weg</button>`+
       `<p class="hint">${pcOn?`Wecker nach ${st.awayMin||25} min · VATSIM erlaubt max. 30`:'Geht, sobald die PC-Bridge läuft.'}</p></div>`;
   }
-  renderAlarme();renderVerlauf();
+  renderCtl(st,pcOn);renderAlarme();renderVerlauf();renderLog();renderSheet();renderSound();
+}
+/* Steuern vom Handy: Sim-Pause (FSUIPC), IDENT + ATIS/METAR über das vPilot-Plugin */
+function renderCtl(st,pcOn){
+  const el=$('#ctlWrap');if(!el)return;
+  if(!pcOn){el.innerHTML='';return}
+  const paused=PAUSED!=null&&Date.now()-PAUSED.t<6000?PAUSED.on:!!st.paused,vp=!!st.vp,arr=st.arr||'';
+  const b=(cmd,ic,t,sub,dis,on)=>`<button class="cbtn${on?' on':''}" data-rc="${esc(cmd)}" ${dis?'disabled':''}><svg><use href="#${ic}"/></svg>${t}${sub?`<small>${sub}</small>`:''}</button>`;
+  el.innerHTML=`<div class="sec"><span class="eyebrow">Steuern</span><span>${vp?'vPilot verbunden':'vPilot-Plugin fehlt'}</span></div><div class="card"><div class="ctl">`+
+    (paused?b('resume','i-play','Sim weiter','läuft gerade nicht',!st.sim,true):b('pause','i-pause','Sim pausieren','',!st.sim))+
+    b('ident','i-sq','IDENT','Transponder',!vp)+
+    b('atis:'+arr,'i-radio','ATIS '+esc(arr||'Ziel'),'abfragen',!vp||!arr)+
+    b('metar:'+arr,'i-cloud','METAR '+esc(arr||'Ziel'),'abfragen',!vp||!arr)+
+    `</div>${vp?'':'<p class="note">IDENT, ATIS und METAR brauchen das EFB-Plugin in vPilot (bridge/vpilot/build.bat).</p>'}</div>`;
 }
 function renderAlarme(){
   if(!APP){$('#alarmBody').innerHTML='<p class="note" style="margin-top:12px">Alarme einstellen geht in der App „EFB Wächter“ auf dem Handy.</p>';return}
   let h='<p class="note">Am PC bekommst du eine Nachricht, im Weg-Modus klingelt der Wecker. Pro Alarm einstellbar.</p>';
-  for(const g of['Flug','Cockpit','Sonstiges']){
+  const all=S.sounds&&S.sounds['*'];
+  if(all)h+=`<div class="sec"><span class="eyebrow">Weckerton</span></div><div class="card list"><button class="it" data-snd="*">${icon('i-music','c')}<div class="tx"><b>Für alle Alarme</b><span>Warnungen haben eigene Töne, wenn du willst</span></div><span class="v">${esc(all.name)}<svg><use href="#i-chev"/></svg></span></button></div>`;
+  for(const g of['Flug','Cockpit','VATSIM','Sonstiges']){
     h+=`<div class="sec"><span class="eyebrow">${g}</span></div><div class="card list">`;
     for(const[k,v]of Object.entries(KIND)){if(v[3]!==g)continue;const m=S.modes[k]??0,open=OPEN===k;
       h+=`<button class="it${open?' open':''}" data-open="${k}" aria-expanded="${open}">${icon(v[1],v[2])}<div class="tx"><b>${esc(v[0])}</b>${SUBS[k]?`<span>${SUBS[k]}</span>`:''}</div><span class="v${m>=2?' w':''}">${MODES[m][0]}<svg><use href="#i-chev"/></svg></span></button>`;
-      if(open)h+=`<div class="pick" role="radiogroup">${MODES.map(([t,d],i)=>`<button class="opt${i===m?' on':''}" role="radio" aria-checked="${i===m}" data-k="${k}" data-m="${i}"><span>${t}${d?`<em>${d}</em>`:''}</span>${i===m?'<svg><use href="#i-check"/></svg>':''}</button>`).join('')}</div>`;
+      if(open){const sd=S.sounds&&S.sounds[k];
+        h+=`<div class="pick" role="radiogroup">${MODES.map(([t,d],i)=>`<button class="opt${i===m?' on':''}" role="radio" aria-checked="${i===m}" data-k="${k}" data-m="${i}"><span>${t}${d?`<em>${d}</em>`:''}</span>${i===m?'<svg><use href="#i-check"/></svg>':''}</button>`).join('')}</div>`+
+          (sd&&m>=2?`<div class="pick"><button class="opt" data-snd="${k}"><span>Weckerton<em>${esc(sd.name)} · ${sndHow(k)}</em></span><svg style="color:var(--t3)"><use href="#i-chev"/></svg></button></div>`:'');}
     }
     h+='</div>';
   }
   h+='<div style="height:12px"></div><button class="ghost" id="testW"><svg width="18" height="18"><use href="#i-bell"/></svg>Wecker testen</button>';
   const fx=[[S.notif,'Benachrichtigungen','notif'],[S.fsi,'Vollbild-Wecker','fsi'],[S.battery,'Läuft im Hintergrund (Akku-Optimierung aus)','battery']];
+  if(S.liveNotif!=null)h+=`<div class="sec"><span class="eyebrow">Sperrbildschirm</span></div><div class="card list"><button class="it" id="liveSw" role="switch" aria-checked="${!!S.liveNotif}">${icon('i-down','a')}<div class="tx"><b>Live-Status im Flug</b><span>TOD und ETA als Countdown (nur im WLAN)</span></div><span class="sw${S.liveNotif?' on':''}"></span></button></div>`;
   h+=`<div class="sec"><span class="eyebrow">Einrichtung</span></div><div class="card list">`+fx.map(([ok,t,a])=>`<div class="it">${icon(ok?'i-check':'i-warn',ok?'g':'a')}<div class="tx"><b>${t}</b><span>${ok?'erlaubt':'noch nicht erlaubt'}</span></div>${ok?'':`<button class="btn-s" data-fix="${a}">Erlauben</button>`}</div>`).join('')+`</div>`;
   h+=`<div class="sec"><span class="eyebrow">Kopplung</span></div><div class="card list"><div class="it">${icon('i-link','c')}<div class="tx"><b>PC-Kanal</b><span class="num" style="word-break:break-all">${esc(S.topic)}</span></div></div></div>`+
      `<div style="height:10px"></div><button class="ghost" id="unpair" style="color:var(--t2)">Anderen Kanal eingeben</button>`;
@@ -279,12 +361,76 @@ function renderAlarme(){
 }
 function renderVerlauf(){
   const h=(S.history||[]).slice(-40).reverse();
-  $('#hist').innerHTML=h.length?h.map(x=>{const v=KIND[x.kind]||KIND.info;
-    return`<div class="it">${icon(v[1],v[2])}<div class="tx"><b>${esc(x.title)}</b><span>${x.mode===2?'als Wecker':x.mode===1?'als Nachricht':'nur im Verlauf'}</span></div><span class="tm">${hm(x.t)}</span></div>`}).join('')
+  $('#hist').innerHTML=h.length?h.map(x=>{const v=KIND[x.kind]||KIND.info,how=x.mode===2?'als Wecker':x.mode===1?'als Nachricht':'nur im Verlauf';
+    const msg=x.msg&&['contact','atis','landing','fuel','crash','vatsim','sector','tod'].includes(x.kind)?`<span class="msg">${esc(x.msg)}</span>`:'';
+    return`<div class="it" data-hid="${esc(x.id)}">${icon(v[1],v[2])}<div class="tx"><b>${esc(x.title)}</b>${msg}<span class="meta">${how}</span></div>`+
+      (x.from?`<button class="rbtn" data-reply="${esc(x.id)}">Antworten</button>`:`<span class="tm">${hm(x.t)}</span>`)+'</div>'}).join('')
     :'<div class="it"><div class="tx"><span>Noch keine Meldungen.</span></div></div>';
   const seen=+localStorage.getItem('efb.seen')||0,neu=(S.history||[]).filter(x=>x.t>seen&&x.kind!=='info').length;
   const b=$('#badge');b.textContent=neu>9?'9+':neu;b.classList.toggle('hide',!neu||TAB==='verlauf');
   if(TAB==='verlauf')localStorage.setItem('efb.seen',Date.now());
+}
+/* Weckerton wählen: eingebaute Töne, Ton vom Handy, eigene Datei. Antippen spielt ihn kurz an. */
+function sndHow(k){const st=S.sounds[k].set;return st==='inherit'||(st===''&&!URGENT.includes(k))?'wie alle':st===''?'Standard':'eigener Ton'}
+function renderSound(){
+  let el=$('#sndWrap');if(!el){el=document.createElement('div');el.id='sndWrap';document.body.appendChild(el)}
+  if(!SND||!S.sounds){el.innerHTML='';return}
+  const k=SND,cur=S.sounds[k],inh=k!=='*'&&(cur.set==='inherit'||(cur.set===''&&!URGENT.includes(k)));
+  const B=S.builtin||[],isB=B.some(b=>b.uri===cur.uri);
+  const row=(attrs,name,sub,on)=>`<button class="opt${on?' on':''}" role="radio" aria-checked="${on}" ${attrs}><span>${esc(name)}${sub?`<em>${esc(sub)}</em>`:''}</span><svg${on?'':' style="color:var(--t3)"'}><use href="#${on?'i-check':'i-play'}"/></svg></button>`;
+  let h='';
+  if(k!=='*')h+=row(`data-su="inherit" data-sn=""`,'Wie alle Alarme',S.sounds['*'].name,inh);
+  h+=B.map(b=>row(`data-su="${esc(b.uri)}" data-sn="${esc(b.name)}"`,b.name,b.name==='Dringend'?'für Warnungen':b.name==='Glocke (sanft)'?'zum Wachwerden':'',!inh&&b.uri===cur.uri)).join('');
+  if(!inh&&!isB)h+=row(`data-su="${esc(cur.uri)}" data-sn="${esc(cur.name)}"`,cur.name,'vom Handy / eigene Datei',true);
+  el.innerHTML=`<div class="scrim" data-sclose></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Weckerton"><div class="grab"></div>`+
+    `<div class="eyebrow">Weckerton · ${k==='*'?'alle Alarme':esc((KIND[k]||KIND.info)[0])}</div><p class="note" style="margin:4px 0 10px">Antippen wählt den Ton und spielt ihn kurz an (Wecker-Lautstärke).</p>`+
+    `<div class="pick" style="margin:0" role="radiogroup">${h}</div><div style="height:10px"></div>`+
+    `<button class="qr" data-spick="sys">${icon('i-bell','n')}<span style="margin-left:12px">Ton vom Handy …</span></button>`+
+    `<button class="qr" data-spick="file">${icon('i-music','n')}<span style="margin-left:12px">Eigene Datei (MP3, WAV) …</span></button>`+
+    `<div style="height:12px"></div><button class="cta go" data-sclose style="min-height:52px;font-size:16px">Fertig</button></div>`;
+}
+function closeSound(){SND=null;APP&&APP.stopPreview&&APP.stopPreview();renderSound()}
+/* Antwort an den Lotsen (Privatnachricht über vPilot) */
+function renderSheet(){
+  let el=$('#sheetWrap');if(!el){el=document.createElement('div');el.id='sheetWrap';document.body.appendChild(el)}
+  if(!SHEET){el.innerHTML='';return}
+  if(el.dataset.for===SHEET.id&&el.innerHTML)return;     // Eingabe nicht bei jedem Update verlieren
+  el.dataset.for=SHEET.id;
+  el.innerHTML=`<div class="scrim" data-close></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Antwort an ${esc(SHEET.from)}"><div class="grab"></div>`+
+    `<div class="eyebrow">${esc(SHEET.title)} · ${hm(SHEET.t)}</div><div class="said">${esc(SHEET.msg)}</div>`+
+    `<div class="eyebrow">Antworten an ${esc(SHEET.from)}</div>`+QUICK.map(q=>`<button class="qr" data-q="${esc(q)}">${esc(q)}</button>`).join('')+
+    `<div style="display:flex;gap:8px;margin-top:12px"><input id="replyIn" maxlength="240" placeholder="Eigene Antwort …" autocomplete="off" aria-label="Eigene Antwort"><button class="btn-s" id="replySend">Senden</button></div>`+
+    `<p class="note">Geht als Privatnachricht über vPilot an ${esc(SHEET.from)}.</p><div style="height:6px"></div><button class="ghost" data-close style="color:var(--t2)">Schließen</button></div>`;
+}
+function reply(text){
+  text=String(text||'').trim();if(!SHEET||!text)return;
+  send(`pm:${SHEET.from}:${text}`);toast('Gesendet an '+SHEET.from);SHEET=null;renderSheet();
+}
+/* Logbuch: vergangene Flüge mit Aufsetzrate (kommt per WLAN vom PC, in der App gespeichert) */
+const dur=ms=>{const m=Math.round(ms/60000);return`${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`};
+function renderLog(){
+  const el=$('#lbBody');if(!el)return;
+  if(!APP){el.innerHTML='<p class="note" style="margin-top:12px">Das Logbuch gibt es in der App „EFB Wächter“ (kommt per WLAN vom PC).</p>';return}
+  const L=(S.logbook||[]).filter(f=>f.fpm!=null);
+  if(!L.length){el.innerHTML='<div class="card" style="margin-top:14px"><p class="sub">Noch keine Flüge. Nach der Landung und 30 s Stillstand am Stand trägt die PC-Bridge den Flug ein – mit Aufsetzrate, G-Last und Flugzeit.</p></div>'+(S.lan?'':'<p class="note">Das Logbuch kommt, wenn das Handy im selben WLAN wie der PC ist.</p>');return}
+  const avg=Math.round(L.reduce((a,f)=>a+Math.abs(f.fpm),0)/L.length),best=L.reduce((a,f)=>Math.abs(f.fpm)<Math.abs(a.fpm)?f:a,L[0]);
+  const air=L.reduce((a,f)=>a+(f.landing&&f.takeoff?f.landing-f.takeoff:0),0);
+  let h=`<div class="sum" style="margin-top:14px"><div><b>FLÜGE</b><span>${L.length}</span></div><div><b>Ø LANDUNG</b><span>-${avg}</span></div><div><b>BESTE</b><span class="g-${esc(best.grade)}">${best.fpm}</span></div></div>`+
+    `<p class="note">${dur(air)} h in der Luft · Aufsetzrate in ft/min</p><div class="sec"><span class="eyebrow">Letzte Flüge</span></div><div class="card list">`;
+  for(const f of L){
+    const open=LBOPEN===f.id,d=new Date(f.landing||f.offBlock||Date.parse(f.date));
+    const day=d.toLocaleDateString('de-DE',{day:'numeric',month:'short'});
+    h+=`<button class="it${open?' open':''}" data-lb="${esc(f.id)}" aria-expanded="${open}"><span class="fpm g-${esc(f.grade)}">${f.fpm}<small>${esc(f.grade)}</small></span>`+
+      `<div class="tx"><b>${esc(f.dep||'?')} → ${esc(f.arr||'?')}</b><span>${[f.cs,f.type,day,f.takeoff&&f.landing?dur(f.landing-f.takeoff)+' h':''].filter(Boolean).map(esc).join(' · ')}</span></div>`+
+      `<span class="v">${f.g!=null?f.g.toFixed(2)+' G':''}<svg><use href="#i-chev"/></svg></span></button>`;
+    if(open){
+      const t=x=>x?hm(x):'–',used=f.fuelOutLbs!=null&&f.fuelInLbs!=null?Math.round((f.fuelOutLbs-f.fuelInLbs)*0.453592):null;
+      h+=`<div class="lbd"><span>Off-Block</span><em>${t(f.offBlock)}</em><span>Start</span><em>${t(f.takeoff)}</em><span>Landung</span><em>${t(f.landing)}</em><span>On-Block</span><em>${t(f.onBlock)}</em>`+
+        `${f.offBlock&&f.onBlock?`<span>Blockzeit</span><em>${dur(f.onBlock-f.offBlock)} h</em>`:''}${used!=null&&used>0?`<span>Sprit</span><em>${used.toLocaleString('de-DE')} kg</em>`:''}`+
+        `<span>Aufsetzen</span><em>${f.fpm} fpm · ${f.g!=null?f.g.toFixed(2):'–'} G${f.bounces?' · '+f.bounces+'× gesprungen':''}</em></div>`;
+    }
+  }
+  el.innerHTML=h+'</div>';
 }
 setInterval(()=>{if(S.status&&S.status.away)render()},15000);
 
@@ -292,6 +438,21 @@ setInterval(()=>{if(S.status&&S.status.away)render()},15000);
 document.addEventListener('click',e=>{
   let b;
   if(b=e.target.closest('[data-tab]')){TAB=b.dataset.tab;localStorage.setItem('efb.tab',TAB);OPEN='';render();window.scrollTo(0,0);return}
+  if(b=e.target.closest('[data-rc]')){if(b.disabled)return;const c=b.dataset.rc;send(c);
+    if(c==='pause'||c==='resume'){PAUSED={on:c==='pause',t:Date.now()};renderCtl(S.status||{},true)}
+    toast(c==='pause'?'Sim wird pausiert':c==='resume'?'Sim läuft weiter':c==='ident'?'IDENT gesendet':'Abfrage gesendet – Antwort kommt als Meldung');return}
+  if(b=e.target.closest('[data-snd]')){SND=b.dataset.snd;renderSound();return}
+  if(b=e.target.closest('[data-su]')){const u=b.dataset.su;if(!APP)return;APP.setSound(SND,u,b.dataset.sn);
+    if(u!=='inherit')APP.preview(u);else APP.preview(S.sounds['*'].uri);load();return}
+  if(b=e.target.closest('[data-spick]')){if(APP)b.dataset.spick==='sys'?APP.pickSystem(SND):APP.pickFile(SND);return}
+  if(e.target.closest('[data-sclose]')){closeSound();return}
+  if(b=e.target.closest('[data-reply]')){const x=(S.history||[]).find(h=>h.id===b.dataset.reply);if(x){SHEET={id:x.id,from:x.from,title:x.title,msg:x.msg,t:x.t};renderSheet()}return}
+  if(b=e.target.closest('[data-q]')){reply(b.dataset.q);return}
+  if(e.target.closest('#replySend')){reply($('#replyIn').value);return}
+  if(e.target.closest('[data-close]')){SHEET=null;renderSheet();return}
+  if(b=e.target.closest('[data-lb]')){LBOPEN=LBOPEN===b.dataset.lb?'':b.dataset.lb;renderLog();return}
+  if(b=e.target.closest('[data-hid]')){b.classList.toggle('full');return}
+  if(e.target.closest('#liveSw')){S.liveNotif=!S.liveNotif;APP&&APP.setLiveNotif&&APP.setLiveNotif(S.liveNotif);renderAlarme();return}
   if(b=e.target.closest('[data-cmd]')){if(b.disabled)return;send(b.dataset.cmd);S.status=S.status||{};S.status.away=b.dataset.cmd==='weg';S.status.awaySince=Date.now();render();window.scrollTo(0,0);return}
   if(b=e.target.closest('[data-open]')){OPEN=OPEN===b.dataset.open?'':b.dataset.open;renderAlarme();return}
   if(b=e.target.closest('[data-k]')){APP&&APP.setMode(b.dataset.k,+b.dataset.m);S.modes[b.dataset.k]=+b.dataset.m;OPEN='';renderAlarme();return}
@@ -302,6 +463,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#unpair')){if(APP)APP.setTopic('');else{location.hash='';localStorage.removeItem('efb.topic');S.topic=''}TAB='flug';load();return}
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='replyIn')reply(e.target.value);if(e.key==='Escape'&&SHEET){SHEET=null;renderSheet()}if(e.key==='Escape'&&SND)closeSound()});
 window.efbStatus=()=>S.status;
 load();browserListen();
 }

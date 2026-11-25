@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.RemoteInput;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
@@ -44,8 +45,10 @@ public class WatchService extends Service {
     static volatile boolean connected;
     static volatile Runnable uiListener;           // MainActivity: Oberfläche neu laden
 
-    static final String CH_SVC = "svc", CH_MSG = "msg", CH_ALARM = "wecker";
-    static final int ID_SVC = 1, ID_ALARM = 2;
+    static final String CH_SVC = "svc", CH_MSG = "msg", CH_ALARM = "wecker", CH_LIVE = "live";
+    static final int ID_SVC = 1, ID_ALARM = 2, ID_LIVE = 3;
+    /** Schnell-Antworten an den Lotsen (Privatnachricht über vPilot) */
+    static final String[] QUICK = {"Roger", "Back at the controls in 2 min", "Wilco"};
     private static int nextId = 100;
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -76,7 +79,10 @@ public class WatchService extends Service {
         alarm.setSound(null, null);                  // Ton spielt die App selbst (Wecker-Lautstärke, Dauerschleife)
         alarm.enableVibration(false);
         alarm.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        nm.createNotificationChannel(svc); nm.createNotificationChannel(msg); nm.createNotificationChannel(alarm);
+        NotificationChannel lv = new NotificationChannel(CH_LIVE, "Flug live (Sperrbildschirm)", NotificationManager.IMPORTANCE_DEFAULT);
+        lv.setSound(null, null); lv.enableVibration(false); lv.setShowBadge(false);
+        lv.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        nm.createNotificationChannel(svc); nm.createNotificationChannel(msg); nm.createNotificationChannel(alarm); nm.createNotificationChannel(lv);
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -208,7 +214,7 @@ public class WatchService extends Service {
         try {
             if ("alarm".equals(ev)) {
                 JSONObject o = new JSONObject(data);
-                alarm(o.optString("aid"), o.optLong("t", System.currentTimeMillis()), o.optString("kind", "info"), o.optString("title", "EFB"), o.optString("message", ""));
+                alarm(o.optString("aid"), o.optLong("t", System.currentTimeMillis()), o.optString("kind", "info"), o.optString("title", "EFB"), o.optString("message", ""), o.optString("from", ""));
             } else if ("status".equals(ev)) {
                 JSONObject s = new JSONObject(data);
                 if (!s.has("rx")) s.put("rx", System.currentTimeMillis());
@@ -216,10 +222,14 @@ public class WatchService extends Service {
             } else if ("live".equals(ev)) {
                 live = data;
                 Runnable r = liveListener; if (r != null) main.post(r);
+                updateLive(data);
+            } else if ("logbook".equals(ev)) {
+                new JSONArray(data);                       // nur gültiges JSON speichern
+                Prefs.logbook(this, data); ui();
             }
         } catch (Exception ignored) { }
     }
-    private void setLan(boolean c) { boolean ch = lanConnected != c; lanConnected = c; if (!c) live = ""; if (ch) ui(); }
+    private void setLan(boolean c) { boolean ch = lanConnected != c; lanConnected = c; if (!c) { live = ""; updateLive(""); } if (ch) ui(); }
 
     static String sha12(String s) {
         try {
@@ -240,40 +250,96 @@ public class WatchService extends Service {
             Prefs.status(this, s.toString());
             ui(); return;
         }
-        String kind = "info", aid = "";
+        String kind = "info", aid = "", from = "";
         JSONArray tags = m.optJSONArray("tags");
         if (tags != null) for (int i = 0; i < tags.length(); i++) {
             String g = tags.optString(i);
             if (g.startsWith("efb-")) kind = g.substring(4);
             if (g.startsWith("aid-")) aid = g.substring(4);
+            if (g.startsWith("from-")) from = g.substring(5).toUpperCase();
         }
-        alarm(aid.isEmpty() ? id : aid, t, kind, m.optString("title", "EFB"), m.optString("message", ""));
+        alarm(aid.isEmpty() ? id : aid, t, kind, m.optString("title", "EFB"), m.optString("message", ""), from);
     }
 
     /** Ein Alarm – egal ob über ntfy oder WLAN direkt. Gleiche ID (aid) → nur einmal. */
-    private synchronized void alarm(String hid, long t, String kind, String title, String msg) {
+    private synchronized void alarm(String hid, long t, String kind, String title, String msg, String from) {
         int set = Prefs.mode(this, kind);
         // 2 = Wecker nur, wenn du weg bist (Weg-Modus der PC-Bridge) – am PC reicht eine Nachricht
         int mode = set == 3 ? 2 : set == 2 ? (Prefs.away(this) ? 2 : 1) : set;
-        boolean fresh = Prefs.addHistory(this, hid, t, kind, title, msg, mode);
+        boolean fresh = Prefs.addHistory(this, hid, t, kind, title, msg, mode, from);
         ui();
         if (!fresh || System.currentTimeMillis() - t > 120000) return;   // alte Meldungen beim Wiederverbinden: nur in den Verlauf
         final String k = kind;
-        if (mode == 2) main.post(() -> ring(k, title, msg));
-        else if (mode == 1) message(title, msg);
+        final String fr = "contact".equals(kind) ? from : "";
+        if (mode == 2) main.post(() -> ring(k, title, msg, fr));
+        else if (mode == 1) message(title, msg, fr);
     }
 
     /* ---------- Nachricht ---------- */
-    private void message(String title, String msg) {
-        Notification n = new Notification.Builder(this, CH_MSG)
+    private void message(String title, String msg, String from) {
+        int id = nextId++;
+        Notification.Builder b = new Notification.Builder(this, CH_MSG)
                 .setSmallIcon(R.drawable.ic_plane).setContentTitle(title).setContentText(msg)
                 .setStyle(new Notification.BigTextStyle().bigText(msg))
-                .setContentIntent(openApp()).setAutoCancel(true).build();
-        getSystemService(NotificationManager.class).notify(nextId++, n);
+                .setContentIntent(openApp()).setAutoCancel(true);
+        replyActions(b, from, id);
+        getSystemService(NotificationManager.class).notify(id, b.build());
     }
 
+    /** Lotsen-Nachricht: „Antworten“ (eigener Text direkt in der Benachrichtigung) + zwei Schnell-Antworten */
+    private void replyActions(Notification.Builder b, String from, int nid) {
+        if (from == null || from.isEmpty()) return;
+        Intent ri = new Intent(this, ActionReceiver.class).setAction(ActionReceiver.REPLY).putExtra("from", from).putExtra("nid", nid);
+        PendingIntent rp = PendingIntent.getBroadcast(this, nid * 10, ri, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+        b.addAction(new Notification.Action.Builder(null, "Antworten", rp)
+                .addRemoteInput(new RemoteInput.Builder(ActionReceiver.KEY_TEXT).setLabel("Antwort an " + from).build()).build());
+        for (int i = 0; i < 2; i++) {
+            Intent qi = new Intent(this, ActionReceiver.class).setAction(ActionReceiver.REPLY).putExtra("from", from).putExtra("nid", nid).putExtra("text", QUICK[i]);
+            b.addAction(new Notification.Action.Builder(null, QUICK[i], PendingIntent.getBroadcast(this, nid * 10 + 1 + i, qi, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)).build());
+        }
+    }
+
+    /* ---------- Live-Status auf dem Sperrbildschirm: „TOD in 12 min“ (nur in der Luft, nur mit WLAN-Live-Daten) ---------- */
+    private String liveShown = "";
+    private long liveAt;
+    private synchronized void updateLive(String data) {
+        try {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            JSONObject o = data == null || data.isEmpty() ? null : new JSONObject(data);
+            if (o == null || !Prefs.liveNotif(this) || o.optBoolean("gnd", true)) {
+                if (!liveShown.isEmpty()) { nm.cancel(ID_LIVE); liveShown = ""; }
+                return;
+            }
+            long now = System.currentTimeMillis();
+            int tod = o.isNull("todMin") ? -1 : o.optInt("todMin", -1), eta = o.isNull("etaMin") ? -1 : o.optInt("etaMin", -1);
+            int alt = o.optInt("alt", 0), gs = o.optInt("gs", 0);
+            String title = tod >= 0 ? "TOD in " + tod + " min" : eta >= 0 ? "Landung in " + eta + " min" : "Im Flug";
+            String chip = tod >= 0 ? "TOD " + tod + "′" : eta >= 0 ? eta + " min" : "";
+            java.text.SimpleDateFormat hm = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.GERMANY);
+            String text = (alt >= 10000 ? "FL" + Math.round(alt / 100f) : alt + " ft") + " · " + gs + " kt"
+                    + (tod >= 0 ? " · TOD " + hm.format(new java.util.Date(now + tod * 60000L)) : "")
+                    + (eta >= 0 ? " · ETA " + hm.format(new java.util.Date(now + eta * 60000L)) : "");
+            String key = title + "|" + text;
+            if (key.equals(liveShown) || (!liveShown.isEmpty() && now - liveAt < 10000)) return;
+            liveShown = key; liveAt = now;
+            Notification.Builder b = new Notification.Builder(this, CH_LIVE)
+                    .setSmallIcon(R.drawable.ic_plane).setContentTitle(title).setContentText(text)
+                    .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
+                    .setVisibility(Notification.VISIBILITY_PUBLIC).setCategory(Notification.CATEGORY_STATUS)
+                    .setContentIntent(openApp());
+            if (Build.VERSION.SDK_INT >= 36) {                   // Android 16+: „Live-Update“ als Chip oben in der Statusleiste
+                try { Notification.Builder.class.getMethod("setRequestPromotedOngoing", boolean.class).invoke(b, true); } catch (Exception ignored) { }
+                if (!chip.isEmpty()) try { Notification.Builder.class.getMethod("setShortCriticalText", String.class).invoke(b, chip); } catch (Exception ignored) { }
+            }
+            nm.notify(ID_LIVE, b.build());
+        } catch (Exception ignored) { }
+    }
+    /** Einstellung geändert: sofort zeigen bzw. weg */
+    static void liveSetting() { WatchService s = inst; if (s != null) { s.liveAt = 0; s.updateLive(lanConnected ? live : ""); } }
+
     /* ---------- Wecker: Vollbild, Dauerklingeln über die Wecker-Lautstärke, Vibration ---------- */
-    void ring(String kind, String title, String msg) {
+    void ring(String kind, String title, String msg) { ring(kind, title, msg, ""); }
+    void ring(String kind, String title, String msg, String from) {
         stopRing(false);
         ringingKind = kind;
         try {
@@ -281,33 +347,36 @@ public class WatchService extends Service {
             wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "efb:wecker");
             wake.acquire(6 * 60 * 1000L);
         } catch (Exception ignored) { }
-        try {
-            Uri u = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-            if (u == null) u = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-            player = new MediaPlayer();
-            player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-            player.setDataSource(this, u);
-            player.setLooping(true);
-            player.prepare();
-            player.start();
-        } catch (Exception ignored) { }
+        // gewählter Ton → sonst eingebauter Gong (z. B. eigene Datei gelöscht) → sonst Weckerton des Handys
+        String[] snd = Prefs.soundFor(this, kind);
+        try { player = play(this, Uri.parse(snd[0]), true); }
+        catch (Exception e) {
+            try { player = play(this, Uri.parse(Prefs.builtinUri(this, "efb_gong")), true); }
+            catch (Exception e2) {
+                try {
+                    Uri u = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                    if (u == null) u = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+                    player = play(this, u, true);
+                } catch (Exception ignored) { }
+            }
+        }
         try {
             Vibrator v = getSystemService(Vibrator.class);
             v.vibrate(VibrationEffect.createWaveform(new long[]{0, 900, 600}, 0),
                     new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build());
         } catch (Exception ignored) { }
 
-        Intent full = new Intent(this, AlarmActivity.class).putExtra("title", title).putExtra("msg", msg)
+        Intent full = new Intent(this, AlarmActivity.class).putExtra("title", title).putExtra("msg", msg).putExtra("from", from == null ? "" : from)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
         PendingIntent fullPi = PendingIntent.getActivity(this, 2, full, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent ack = PendingIntent.getBroadcast(this, 3, new Intent(this, ActionReceiver.class).setAction(ActionReceiver.ACK), PendingIntent.FLAG_IMMUTABLE);
-        Notification n = new Notification.Builder(this, CH_ALARM)
+        Notification.Builder nb = new Notification.Builder(this, CH_ALARM)
                 .setSmallIcon(R.drawable.ic_plane).setContentTitle(title).setContentText(msg)
                 .setCategory(Notification.CATEGORY_ALARM).setOngoing(true)
                 .setFullScreenIntent(fullPi, true).setContentIntent(fullPi)
-                .addAction(new Notification.Action.Builder(null, "Bin dran", ack).build())
-                .build();
-        getSystemService(NotificationManager.class).notify(ID_ALARM, n);
+                .addAction(new Notification.Action.Builder(null, "Bin dran", ack).build());
+        replyActions(nb, from, ID_ALARM);
+        getSystemService(NotificationManager.class).notify(ID_ALARM, nb.build());
         main.removeCallbacks(autoStop);
         main.postDelayed(autoStop, 5 * 60 * 1000L);     // spätestens nach 5 min Ruhe
     }
@@ -325,6 +394,19 @@ public class WatchService extends Service {
         ui();
     }
     boolean isRinging() { return player != null; }
+
+    /** Spielt über die Wecker-Lautstärke (klingelt auch bei Stumm/Vibration). */
+    static MediaPlayer play(Context c, Uri u, boolean loop) throws Exception {
+        MediaPlayer p = new MediaPlayer();
+        try {
+            p.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            p.setDataSource(c, u);
+            p.setLooping(loop);
+            p.prepare();
+            p.start();
+            return p;
+        } catch (Exception e) { p.release(); throw e; }
+    }
 
     /* ---------- Befehle an die PC-Bridge („weg“ / „da“) ---------- */
     static void sendCmd(Context c, String cmd) {

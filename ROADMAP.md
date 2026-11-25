@@ -1,6 +1,6 @@
 # Fahrplan
 
-**Reihenfolge (Stand 2026-11-25):** A1–A4 sind gebaut. **Teil B, Schritt 1** (PC-Bridge `bridge/` + ntfy: Master Warning/Caution, AP aus, Pause, TOD, Weg-Modus) ist gebaut, aber noch nicht am Sim getestet. Dazu die Tray-App `EFB-Bridge.exe` mit MSFS-Autostart. **Handy-App „EFB Wächter“ Schritt 1** (Wecker, Alarme einstellbar, Weg/Zurück, Verlauf, Koppeln per QR) ist gebaut und im Emulator getestet. **Schritt 2 – Flugdaten in der App** (Höhe, GS, V/S, Phase, TOD, aktueller/nächster Lotse, Ziel-ATC) ist gebaut. Sektor-Warnung „in X min neuer Lotse“ und Alarm-Modus „Wecker nur im Weg-Modus“ sind gebaut. Offen in B: vPilot „Contact me“ / private Nachrichten. A5–A9 kommen später.
+**Reihenfolge (Stand 2026-11-25):** A1–A4 sind gebaut. **Teil B, Schritt 1** (PC-Bridge `bridge/` + ntfy: Master Warning/Caution, AP aus, Pause, TOD, Weg-Modus) ist gebaut, aber noch nicht am Sim getestet. Dazu die Tray-App `EFB-Bridge.exe` mit MSFS-Autostart. **Handy-App „EFB Wächter“ Schritt 1** (Wecker, Alarme einstellbar, Weg/Zurück, Verlauf, Koppeln per QR) ist gebaut und im Emulator getestet. **Schritt 2 – Flugdaten in der App** (Höhe, GS, V/S, Phase, TOD, aktueller/nächster Lotse, Ziel-ATC) ist gebaut. Sektor-Warnung „in X min neuer Lotse“ und Alarm-Modus „Wecker nur im Weg-Modus“ sind gebaut. **Feature-Paket (App v0.4) gebaut:** vPilot-Plugin (Contact me / Privatnachrichten sichtbar + Antwort vom Handy, SELCAL, IDENT, ATIS/METAR abfragen), Sim-Pause vom Handy, Absturz-/VATSIM-Trennungs-Alarm, Live-Status auf dem Sperrbildschirm, ATIS-Wechsel am Ziel, Fuel-Check gegen SimBrief, Logbuch mit Aufsetzrate. Alles noch nicht am echten Sim/vPilot getestet. A5–A9 kommen später.
 
 ## A. iPad-EFB (index.html) – vom Nutzer freigegeben, noch nicht gebaut
 1. **Bildschirm bleibt an** – Screen Wake Lock API (Safari ≥ 16.4), Schalter in Einstellungen (Standard an), nach Tab-Wechsel neu anfordern.
@@ -25,7 +25,7 @@ Ziel: Nutzer kann bei langen Flügen kurz weg und wird zuverlässig geholt, wenn
 - SimConnect: Position, Höhe, GS, Sim-Rate, Pause; Fenix-Warnungen (Master Caution/Warning) über L-Vars (z. B. via MobiFlight WASM / FSUIPC).
 - VATSIM: Online-Lotsen + Sektorgrenzen (VATSpy) → „Du fliegst in X Minuten in den Sektor von EDGG_…_CTR“.
 - TOD: aus SimBrief-OFP + aktueller Position (Konkurrenz macht es genauso).
-- „Contact me“ / private Nachrichten: vPilot-Plugin-Schnittstelle (wichtigster Alarm!).
+- „Contact me“ / private Nachrichten: vPilot-Plugin-Schnittstelle (wichtigster Alarm!). ✓ gebaut (`bridge/vpilot/`)
 - Liefert Live-Daten zusätzlich ans iPad-EFB (lokales WebSocket) → automatische Phase/Frequenz.
 
 **Handy (Android)**

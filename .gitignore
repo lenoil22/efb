@@ -3,5 +3,7 @@ bridge/config.json
 bridge/lvars-gefunden.txt
 bridge/bridge.log
 bridge/vatspy-cache/
+bridge/logbook.json
+bridge/vpilot/*.dll
 bridge/EFB-Bridge.exe
 bridge/app/efb.ico
