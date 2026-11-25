@@ -24,7 +24,7 @@ header{position:sticky;top:0;z-index:20;background:var(--bg);padding:calc(10px +
 header .cs{font:700 15px "B612 Mono",monospace;color:var(--g)}
 header .rt{font:12px "B612 Mono",monospace;color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--mut);flex:none}.dot.on{background:var(--g)}.dot.err{background:var(--r)}
-#sync{font-size:11px;color:var(--mut)}
+#sync{font-size:11px;color:var(--mut)}#sync.me{font:12px "B612 Mono",monospace;color:var(--ink)}
 .gear{color:var(--dim);display:flex;padding:6px}.gear svg{width:20px;height:20px}.gear.act{color:var(--ink)}
 main{padding:18px 18px calc(170px + env(safe-area-inset-bottom));max-width:760px;margin:0 auto}
 nav{position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--bg);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding-bottom:env(safe-area-inset-bottom)}
@@ -139,6 +139,10 @@ select{appearance:auto}
     <div class="msg" id="sbMsg">Lädt deinen zuletzt erstellten Plan. Leere Felder sind gelb umrandet.</div>
   </div>
   <div class="card">
+    <h3>VATSIM-Position</h3>
+    <div class="msg" id="vPos"></div>
+  </div>
+  <div class="card">
     <h3>Flugdaten</h3>
     <div class="grid" id="fGrid"></div>
     <label class="f" style="margin-top:10px">Route<textarea id="f-route" data-k="route"></textarea></label>
@@ -196,7 +200,7 @@ select{appearance:auto}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='efb.v1';
-const blank=()=>({cs:'',type:'',dep:'',arr:'',altn:'',gate:'',arrGate:'',crz:'',route:'',sid:'',star:'',exitFix:'',depRwy:'',arrRwy:'',squawk:'',atisDep:'',atisArr:'',qnhDep:'',qnhArr:'',clearedAlt:'',passing:'',nextFix:'',hdg:'',appType:'ILS',climb:'',ta:'',tl:'',tod:'',fuel:'',trim:'',flaps:'',vspeeds:'',mins:'',clrType:'sid',wps:[],depPos:null,arrPos:null});
+const blank=()=>({cs:'',type:'',dep:'',arr:'',altn:'',gate:'',arrGate:'',crz:'',route:'',sid:'',star:'',exitFix:'',depRwy:'',arrRwy:'',squawk:'',atisDep:'',atisArr:'',qnhDep:'',qnhArr:'',clearedAlt:'',passing:'',nextFix:'',hdg:'',appType:'ILS',climb:'',ta:'',tl:'',tod:'',fuel:'',trim:'',flaps:'',vspeeds:'',mins:'',clrType:'sid',wps:[],depPos:null,arrPos:null,depElev:'',arrElev:''});
 let S={user:'OnboardTransponder595',f:blank(),phase:'boden',mem:{},ck:{},tab:'flug',req:null,sp:false};
 try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s)S={...S,...s,f:{...blank(),...s.f}}}catch(e){}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
@@ -240,9 +244,56 @@ const ROLEWORD={DEL:'Delivery',GND:'Ground',TWR:'Tower',APP:'Approach',DEP:'Depa
 const CHAIN={DEL:[2,3,4,5,6],GND:[3,4,5,6],TWR:[4,5,6],DEP:[5,6],APP:[5,6],CTR:[6,1]};
 async function pullVatsim(){
   try{const r=await fetch('https://data.vatsim.net/v3/vatsim-data.json',{cache:'no-store'});const j=await r.json();
-    V.ctl=(j.controllers||[]).filter(c=>c.facility>0&&c.frequency!=='199.998');V.atis=j.atis||[];V.t=new Date();V.err=false;
+    V.ctl=(j.controllers||[]).filter(c=>c.facility>0&&c.frequency!=='199.998');V.atis=j.atis||[];V.pil=j.pilots||[];V.t=new Date();V.err=false;
+    trackMe();
   }catch(e){V.err=true}
   head();if(S.tab==='funk')renderFunk();if(S.tab==='info'){renderInfo();renderOnline()}
+  if(S.tab==='flug')renderVPos();
+  if(S.tab==='check'){const k=JSON.stringify(posAhead());if(k!==POS.hk){POS.hk=k;renderCheck()}}
+}
+/* ---------- Wo bin ich? (eigenes Callsign im VATSIM-Feed) ---------- */
+const POS={p:null,vs:null,prev:null,hk:''};
+const myCs=()=>String(S.vcs||F().cs||'').toUpperCase().trim();
+function trackMe(){
+  const cs=myCs();const p=cs?(V.pil||[]).find(x=>String(x.callsign).toUpperCase()===cs):null;
+  if(!p||Date.now()-Date.parse(p.last_updated)>180000){POS.p=null;POS.vs=null;POS.prev=null;return}
+  const t=Date.parse(p.last_updated);
+  if(POS.prev&&POS.prev.cs===cs&&t>POS.prev.t)POS.vs=Math.round((p.altitude-POS.prev.alt)/((t-POS.prev.t)/60000));
+  if(!POS.prev||t>POS.prev.t)POS.prev={cs,alt:p.altitude,t};
+  POS.p=p;
+}
+function nmTo(a,b){if(!b)return null;const R=3440.065,r=x=>x*Math.PI/180;const dl=r(b[0]-a[0]),dn=r(b[1]-a[1]);
+  const h=Math.sin(dl/2)**2+Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+const ftOf=v=>{v=String(v||'').toUpperCase();const n=parseInt(v.replace(/\D/g,''));return isNaN(n)?0:v.startsWith('FL')?n*100:n};
+function altTxt(a,gs){if(gs!=null&&gs<40)return'am Boden';const ta=ftOf(F().ta)||5000;return a>=ta?'FL'+String(Math.round(a/100)).padStart(3,'0'):Math.round(a/100)*100+' ft'}
+/* Phase aus Höhe, GS, Steigrate und Entfernung zu Abflug/Ziel → Seiten-ID im Leitfaden */
+function guessPhase(){
+  const p=POS.p;if(!p)return null;const f=F(),me=[p.latitude,p.longitude];
+  const dD=nmTo(me,f.depPos),dA=nmTo(me,f.arrPos);
+  const atArr=dA!=null&&(dD==null||dA<dD);const elev=+(atArr?f.arrElev:f.depElev)||0,agl=p.altitude-elev,gs=p.groundspeed;
+  let vs=POS.vs;
+  if(vs==null){const crz=ftOf(f.crz);vs=crz&&p.altitude<crz-2000?(atArr?-1000:1000):0}
+  const ta=ftOf(f.ta)||5000,tl=ftOf(f.tl)||7000,tod=parseInt(f.tod)||0;
+  if(gs<40){if(atArr)return gs<3?['park','am Stand']:['alnd','rollt nach der Landung'];return gs<3?null:['taxi','rollt']}
+  if(!atArr&&dD!=null&&dD<8&&agl<1500&&vs>=0)return['tko','Start'];
+  if(atArr&&dA<10&&agl<3000)return['final','Endanflug'];
+  if(atArr&&dA<25&&agl<6000)return['iapp','Anflug'];
+  if(vs>300){if(p.altitude<ta)return['atko','Steigflug'];if(p.altitude<10000)return['ta','Steigflug'];return['climb10','Steigflug']}
+  if(vs<-300){if(p.altitude>=10000)return['tod','Sinkflug'];if(p.altitude>tl)return['desc10','Sinkflug'];return['tl','Sinkflug']}
+  if(p.altitude>=10000){if(tod&&dA!=null&&dA<=tod)return['tod','Top of Descent erreicht'];if(tod&&dA!=null&&dA<=tod+40)return['dprep','kurz vor Top of Descent'];return['cruise','Reiseflug']}
+  return atArr?['desc10','Sinkflug']:['ta','Steigflug'];
+}
+/* Modus „Nur Normal Checklist“: passende Checkliste zur Leitfaden-Seite */
+const LMAP={taxi:'bt',tko:'at',atko:'at',ta:'at',climb10:'at',desc10:'ap',tl:'ap',iapp:'ap',final:'ld',land:'ld',alnd:'al',park:'pk'};
+function renderVPos(){
+  const el=$('#vPos');if(!el)return;const cs=myCs();
+  if(!V.t){el.textContent=V.err?'VATSIM nicht erreichbar.':'Warte auf VATSIM-Daten …';return}
+  if(POS.p){const p=POS.p;const g=guessPhase();
+    el.innerHTML=`<span class="mono" style="color:var(--g)">${esc(p.callsign)}</span> gefunden · ${esc(altTxt(p.altitude,p.groundspeed))} · ${p.groundspeed} kt${POS.vs!=null?' · '+(POS.vs>0?'+':'')+POS.vs+' ft/min':''}${g?' · '+esc(g[1]):''}${S.vcs?` <button class="tiny" data-vcs="">SimBrief-Callsign nehmen</button>`:''}`;return}
+  const f=F();const cand=(V.pil||[]).filter(x=>x.flight_plan&&f.dep&&f.arr&&x.flight_plan.departure===f.dep.toUpperCase()&&x.flight_plan.arrival===f.arr.toUpperCase()).slice(0,6);
+  el.innerHTML=`${cs?esc(cs)+' ist gerade nicht mit VATSIM verbunden.':'Kein Callsign – lade zuerst einen Flug.'}`+
+    (cand.length?`<p class="msg">Mit anderem Callsign online? Gleiche Strecke ${esc(f.dep)} → ${esc(f.arr)}:</p><div class="opts">${cand.map(x=>`<button data-vcs="${esc(x.callsign)}">${esc(x.callsign)}</button>`).join('')}</div>`:'')+
+    (S.vcs?`<div class="opts" style="margin-top:6px"><button data-vcs="">SimBrief-Callsign nehmen</button></div>`:'');
 }
 const pre=c=>c.callsign.split('_')[0];
 /* Wer deckt eine Rolle an einem Platz ab (VATSIM top-down) */
@@ -306,6 +357,7 @@ async function loadSB(){
     if(!f.star){const s=[...fx].reverse().find(x=>x.is_sid_star==='1'&&PROC.test(x.via_airway||''));if(s&&s.via_airway!==f.sid)f.star=s.via_airway}
     f.wps=fx.filter(x=>x.pos_lat&&x.type!=='apt').map(x=>[+x.pos_lat,+x.pos_long,x.ident]);
     if(j.origin?.pos_lat)f.depPos=[+j.origin.pos_lat,+j.origin.pos_long];if(j.destination?.pos_lat)f.arrPos=[+j.destination.pos_lat,+j.destination.pos_long];
+    f.depElev=j.origin?.elevation||'';f.arrElev=j.destination?.elevation||'';S.vcs=null;
     f.clearedAlt=f.crz;f.nextFix=f.exitFix;
     const ta=parseInt(j.origin?.trans_alt||0),tl=parseInt(j.destination?.trans_level||0),el=parseInt(j.destination?.elevation||0);
     if(ta)f.ta=ta+' ft';if(tl)f.tl='FL'+String(Math.round(tl/100)).padStart(3,'0');if(ia)f.tod=String(Math.round((ia-el)*3/1000));
@@ -1086,6 +1138,12 @@ function funkAhead(){
   P.forEach((x,j)=>{if(j<=i)return;const p=rpos(pageReq(x));if(p<=pc||p>pf||(x.opt&&p!==pf))return;if(p>bp){bp=p;best=j}});
   return best<0?null:{j:best,r};
 }
+/* VATSIM-Position schlägt eine spätere Seite vor – nur Hinweis, nur vorwärts */
+function posAhead(){
+  const g=guessPhase();if(!g)return null;const id=S.set.mode==='guided'?g[0]:LMAP[g[0]];if(!id||S.posNo===id)return null;
+  const P=pages(),i=S.g[pkey()]||0,j=P.findIndex(x=>x.id===id);
+  return j>i?{j,id,t:(POS.p.groundspeed<40?'':altTxt(POS.p.altitude)+', ')+g[1]}:null;
+}
 function rowDo(i,v,key,who,note,other){return`<div class="r ${S.x[key]?'x':''} ${other?'other':''}" data-x="${key}"><span class="who">${esc(who||'')}</span><span class="i">${esc(i)}</span><span class="dots"></span><span class="v">${esc(v)}</span></div>${note?`<div class="note">${esc(note)}</div>`:''}`}
 function renderCheck(){
   const P=pages(),k=pkey();let i=S.g[k]||0;if(i>=P.length)i=0;S.g[k]=i;const pg=P[i];
@@ -1106,8 +1164,9 @@ function renderCheck(){
     });
     if(['final','land'].includes(pg.id))h+=`<button class="flink" style="color:var(--r)" id="gGA">Go Around →</button>`;
   }
-  const ah=funkAhead();
-  h+=`<div class="bar">${ah?`<div class="fhint"><span>Funk ist bei <b>${esc(rQ(ah.r).n)}</b> – Checkliste zu ${esc(P[ah.j].n)} springen?</span><button class="go" id="fhGo">Springen</button><button class="no" id="fhNo" aria-label="Hinweis ausblenden">×</button></div>`:''}<div class="pnav"><button class="b1" id="pgPrev" aria-label="Zurück">‹</button><button class="b2" id="pgNext">${ni>=0?'Weiter: '+esc(P[ni].n):'Flug beendet'}</button></div></div>`;
+  const ah=funkAhead(),ph=ah?null:posAhead();POS.hk=JSON.stringify(posAhead());
+  h+=`<div class="bar">${ah?`<div class="fhint"><span>Funk ist bei <b>${esc(rQ(ah.r).n)}</b> – Checkliste zu ${esc(P[ah.j].n)} springen?</span><button class="go" id="fhGo">Springen</button><button class="no" id="fhNo" aria-label="Hinweis ausblenden">×</button></div>`
+    :ph?`<div class="fhint"><span>VATSIM: <b>${esc(ph.t)}</b> – Checkliste zu ${esc(P[ph.j].n)} springen?</span><button class="go" id="phGo">Springen</button><button class="no" id="phNo" aria-label="Hinweis ausblenden">×</button></div>`:''}<div class="pnav"><button class="b1" id="pgPrev" aria-label="Zurück">‹</button><button class="b2" id="pgNext">${ni>=0?'Weiter: '+esc(P[ni].n):'Flug beendet'}</button></div></div>`;
   $('#ckBody').innerHTML=h;
 }
 function pgGo(n,keepFunk){
@@ -1122,6 +1181,8 @@ $('#ckBody').addEventListener('click',e=>{
   if(t.closest('#gGA')){pgGo(FLOWS.findIndex(p=>p.id==='ga'));return}
   if(t.closest('#fhGo')){const a=funkAhead();if(a)pgGo(a.j,true);return}
   if(t.closest('#fhNo')){S.hintNo=funkReq();save();renderCheck();return}
+  if(t.closest('#phGo')){const a=posAhead();if(a)pgGo(a.j);return}
+  if(t.closest('#phNo')){const a=posAhead();if(a)S.posNo=a.id;save();renderCheck();return}
   if(b=t.closest('[data-gfunk]')){const[fp,rq]=b.dataset.gfunk.split('|');S.phase=fp;const i=REQ[fp].findIndex(q=>q.n===rq);S.req=fp+(i<0?0:i);save();tab('funk');return}
   if(b=t.closest('[data-x]')){const k=b.dataset.x;S.x[k]=!S.x[k];save();b.classList.toggle('x',!!S.x[k])}
 });
@@ -1129,7 +1190,7 @@ $('#ckBody').addEventListener('change',e=>{if(e.target.id==='pgSel')pgGo(+e.targ
 $('#t-set').addEventListener('click',e=>{
   let b;if(b=e.target.closest('[data-set]')){const k=b.dataset.set;let v=b.dataset.v;if(v==='true')v=true;if(v==='false')v=false;S.set[k]=v;save();renderSet();if(k==='wake')wakeSync();return}
   if(e.target.closest('#setUserSave')){S.user=$('#setUser').value.trim();save();e.target.textContent='Gespeichert';return}
-  if(e.target.closest('#setNew')){ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;save();tab('flug')}})}
+  if(e.target.closest('#setNew')){ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;S.vcs=null;S.posNo=null;save();tab('flug')}})}
 });
 $('#hSet').onclick=()=>tab('set');
 function renderOnline(){
@@ -1159,14 +1220,18 @@ function renderForm(){
   $('#sbUser').value=S.user||'';
   $('#fGrid').innerHTML=FORM.map(k=>`<label class="f">${esc(K[k].l)}<input data-k="${k}" value="${esc(F()[k])}" placeholder="—" ${K[k].num?'inputmode="numeric"':''}></label>`).join('');
   $('#f-route').value=F().route||'';
+  renderVPos();
 }
+$('#vPos').addEventListener('click',e=>{const b=e.target.closest('[data-vcs]');if(!b)return;S.vcs=b.dataset.vcs||null;S.posNo=null;POS.prev=null;POS.vs=null;save();trackMe();head();renderVPos()});
 
 /* ---------- Kopf & Tabs ---------- */
 function head(){
   const f=F();$('#hCs').textContent=f.cs||'EFB';
   $('#hRt').textContent=f.dep?`${f.dep} → ${f.arr}${f.crz?' · '+f.crz:''}${f.squawk?' · SQ '+f.squawk:''}`:'Kein Flug geladen';
   $('#hDot').className='dot '+(V.err?'err':V.t?'on':'');
-  $('#sync').textContent=V.t?'VATSIM '+V.t.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):V.err?'offline':'–';
+  const p=POS.p,sy=$('#sync');sy.classList.toggle('me',!!p);
+  sy.textContent=p?`${altTxt(p.altitude,p.groundspeed)}${POS.vs>300?' ↑':POS.vs<-300?' ↓':''} · ${p.groundspeed} kt`
+    :V.t?'VATSIM '+V.t.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):V.err?'offline':'–';
 }
 function tab(t){
   S.tab=t;save();$$('section.tab').forEach(s=>s.classList.toggle('act',s.id==='t-'+t));$$('nav button').forEach(b=>b.classList.toggle('act',b.dataset.t===t));
@@ -1196,7 +1261,7 @@ $('#nav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b
 $('#sbLoad').onclick=loadSB;
 $('#sbUser').addEventListener('keydown',e=>{if(e.key==='Enter')loadSB()});
 $('#t-flug').addEventListener('change',e=>{const k=e.target.dataset.k;if(!k)return;let v=e.target.value.trim();if(k!=='route')v=v.toUpperCase();if(['crz','clearedAlt'].includes(k))v=lvl(v);F()[k]=v;if(k==='sid')remember(F().dep,v);if(['dep','arr','altn'].includes(k))pullMetar();save();head()});
-$('#newFlight').onclick=()=>ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;save();renderAll()}});
+$('#newFlight').onclick=()=>ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;S.vcs=null;S.posNo=null;save();renderAll()}});
 $('#phases').addEventListener('click',e=>{const b=e.target.closest('[data-ph]');if(!b)return;S.phase=b.dataset.ph;S.req=S.phase+'0';save();renderFunk()});
 $('#funkBody').addEventListener('click',e=>{
   const t=e.target;let b;
