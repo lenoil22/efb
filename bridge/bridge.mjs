@@ -19,6 +19,7 @@ export const DEFAULTS = {
   todLeadMin: 5,             // TOD-Alarm so viele Minuten vorher
   awayMin: 25,               // Weg-Modus: Alarm nach so vielen Minuten (VATSIM: max. 30)
   pauseAfterSec: 10,         // Pause-Alarm, wenn der Sim in der Luft so lange pausiert
+  sectorLeadMin: 5,          // „Neuer Lotse voraus“ so viele Minuten vorher
   lvars: { warning: '', caution: '', ap1: '', ap2: '' }  // leer = automatisch suchen
 };
 
@@ -191,7 +192,25 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
     }
   }
   const setTod = p => { st.tod = p; st.todSent = false; st.todLast = null; };
-  return { st, offsets, vars, tick, cmd, setTod };
+  /* Neuer Lotse voraus: höchstens einmal pro Rufzeichen und Flug; sectorLeadMin vorher */
+  const told = new Set();
+  function sector(info) {         // info = { cur:[…], next:{cs,freq,d,distNm,at} | null }
+    if (st.onGround || st.gsKt < 80 || !info) return;
+    const n = info.next;
+    if (n && !told.has(n.cs)) {
+      const min = n.distNm / st.gsKt * 60;
+      if (min <= (cfg.sectorLeadMin ?? 5)) {
+        told.add(n.cs);
+        notify({ kind: 'sector', title: `In ${Math.max(1, Math.round(min))} min: ${n.d}`, message: `${n.freq} · ${n.cs} (ab ${n.at}). Erstanruf vorbereiten.`, priority: 4, tags: ['radio'] });
+      }
+    }
+    for (const c of info.cur || []) if (!told.has(c.cs)) {     // Lotse ist gerade online gekommen und ist schon zuständig
+      told.add(c.cs);
+      if (st.sectorStarted) notify({ kind: 'sector', title: `Jetzt zuständig: ${c.d}`, message: `${c.freq} · ${c.cs}. Bitte melden.`, priority: 4, tags: ['radio'] });
+    }
+    st.sectorStarted = true;      // beim ersten Durchlauf schon bekannte Lotsen nicht melden
+  }
+  return { st, offsets, vars, tick, cmd, setTod, sector };
 }
 
 /* ---------- SimBrief: TOD-Punkt aus dem letzten OFP ---------- */
@@ -200,7 +219,73 @@ export async function loadTod(user, fetchImpl = fetch) {
   if (j.fetch?.status && j.fetch.status !== 'Success') throw new Error(j.fetch.status);
   let fx = j.navlog?.fix || []; if (!Array.isArray(fx)) fx = [fx];
   const t = fx.find(x => String(x.ident).toUpperCase() === 'TOD');
-  return { flight: `${j.atc?.callsign || ''} ${j.origin?.icao_code || ''} → ${j.destination?.icao_code || ''}`.trim(), tod: t ? [+t.pos_lat, +t.pos_long] : null };
+  let cum = 0;
+  const wps = fx.map(x => { cum += +x.distance || 0; return x.pos_lat && x.type !== 'apt' ? [+x.pos_lat, +x.pos_long, x.ident, cum] : null; }).filter(Boolean);
+  return { flight: `${j.atc?.callsign || ''} ${j.origin?.icao_code || ''} → ${j.destination?.icao_code || ''}`.trim(), tod: t ? [+t.pos_lat, +t.pos_long] : null, wps };
+}
+
+/* ---------- Sektoren (VATSpy) + Online-Lotsen: „In X min neuer Lotse“ ----------
+   Gleiche Logik wie im EFB (A4). Daten von raw.githubusercontent.com, 7 Tage auf der Platte gecacht. */
+const VSP = 'https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/';
+export function makeSectors({ cacheDir = path.join(DIR, 'vatspy-cache'), fetchImpl = fetch } = {}) {
+  const S = { ok: false, firs: [], uirs: {}, poly: {}, map: {} };
+  async function get(n) {
+    const f = path.join(cacheDir, n);
+    try { if (Date.now() - fs.statSync(f).mtimeMs < 7 * 864e5) return fs.readFileSync(f, 'utf8'); } catch { }
+    const r = await fetchImpl(VSP + n); if (!r.ok) throw new Error(n + ' ' + r.status);
+    const t = await r.text();
+    try { fs.mkdirSync(cacheDir, { recursive: true }); fs.writeFileSync(f, t); } catch { }
+    return t;
+  }
+  function parse(dat, geo) {
+    let sec = '';
+    for (const raw of dat.split(/\r?\n/)) {
+      const l = raw.trim(); if (!l || l[0] === ';') continue; if (l[0] === '[') { sec = l; continue; }
+      const p = l.split('|');
+      if (sec === '[FIRs]' && p.length >= 4) S.firs.push({ icao: p[0], name: p[1], pre: p[2] || p[0], bnd: p[3] || p[0] });
+      if (sec === '[UIRs]' && p.length >= 3) S.uirs[p[0]] = { name: p[1], firs: p[2].split(',') };
+    }
+    for (const ft of JSON.parse(geo).features) {
+      const g = ft.geometry, id = ft.properties.id; if (!g) continue;
+      const polys = g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates];
+      (S.poly[id] = S.poly[id] || []).push(...polys.map(pl => { const ring = pl[0]; let a = 1e9, b = -1e9, c = 1e9, d = -1e9; for (const [x, y] of ring) { a = Math.min(a, x); b = Math.max(b, x); c = Math.min(c, y); d = Math.max(d, y); } return { ring, bb: [a, b, c, d] }; }));
+    }
+    S.ok = true;
+  }
+  async function load() { const [dat, geo] = await Promise.all([get('VATSpy.dat'), get('Boundaries.geojson')]); parse(dat, geo); }
+  const inPoly = (lat, lon, P) => { const [a, b, c, d] = P.bb; if (lon < a || lon > b || lat < c || lat > d) return false; let r = false; const R = P.ring; for (let i = 0, j = R.length - 1; i < R.length; j = i++) { const [xi, yi] = R[i], [xj, yj] = R[j]; if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) r = !r; } return r; };
+  const inBnd = (id, pt) => (S.poly[id] || []).some(P => inPoly(pt[0], pt[1], P));
+  function ctlSec(cs) {
+    if (S.map[cs]) return S.map[cs];
+    const p = cs.toUpperCase().split('_'), p1 = p[0], p2 = p.length > 2 ? p[0] + '_' + p[1] : '';
+    let rows = p2 ? S.firs.filter(f => f.pre === p2) : [], rank = 3;
+    if (!rows.length) { rows = S.firs.filter(f => f.pre === p1 && f.bnd === f.icao); rank = 2; }
+    if (!rows.length) { rows = S.firs.filter(f => f.pre === p1); rank = 2; }
+    if (!rows.length && S.uirs[p1]) { const u = S.uirs[p1]; rows = u.firs.map(i => S.firs.find(f => f.icao === i && f.bnd === i) || S.firs.find(f => f.icao === i)).filter(Boolean).map(f => ({ ...f, name: u.name })); rank = 1; }
+    let n = (rows[0]?.name || p1).split(' - ')[0].trim().replace(/\bACC\b/, 'Radar');
+    if (!/radar|control|centre|center|information/i.test(n)) n = n.replace(/^([^(]*?)(\s*\(|$)/, '$1 Radar$2');
+    return S.map[cs] = { bnd: [...new Set(rows.map(r => r.bnd))], rank, d: n };
+  }
+  /** Center über einem Punkt (ohne FIS); bei mehreren nur die genaueste Ebene */
+  function covers(pt, ctl) {
+    if (!S.ok || !pt) return [];
+    const out = ctl.filter(c => (c.facility === 6 || c.facility === 1) && !/_FIS_/.test(c.callsign)).map(c => ({ c, m: ctlSec(c.callsign) })).filter(x => x.m.bnd.some(id => inBnd(id, pt)));
+    const top = Math.max(0, ...out.map(x => x.m.rank));
+    return out.filter(x => x.m.rank === top).map(x => ({ cs: x.c.callsign, freq: x.c.frequency, d: x.m.d }));
+  }
+  /** Nächster anderer Center entlang der Route ab Position me: { …, distNm, at } */
+  function next(me, wps, ctl) {
+    if (!wps?.length) return null;
+    let bi = 0, bd = 1e9; wps.forEach((w, i) => { const d = nm(me[0], me[1], w[0], w[1]); if (d < bd) { bd = d; bi = i; } });
+    let nx = bi; if (bi < wps.length - 1 && nm(me[0], me[1], wps[bi + 1][0], wps[bi + 1][1]) < nm(wps[bi][0], wps[bi][1], wps[bi + 1][0], wps[bi + 1][1])) nx = bi + 1;
+    const cur = new Set(covers(me, ctl).map(x => x.cs)), base = nm(me[0], me[1], wps[nx][0], wps[nx][1]) - (wps[nx][3] || 0);
+    for (let k = nx; k < wps.length; k++) {
+      const cv = covers(wps[k], ctl);
+      if (cv.length && !cv.some(x => cur.has(x.cs))) return { ...cv[0], distNm: Math.max(0, (wps[k][3] || 0) + base), at: wps[k][2] };
+    }
+    return null;
+  }
+  return { load, covers, next, get ok() { return S.ok; } };
 }
 
 /* ---------- FSUIPC WebSocket Server ---------- */
@@ -294,8 +379,19 @@ async function main() {
   const mon = makeMonitor({ cfg, notify: n => ntfy.send(n) });
   setInterval(mon.tick, 1000);
   ntfy.listen(c => { log('Befehl vom Handy:', c); mon.cmd(c); });
+  /* Neuer Lotse voraus: Sektoren + Online-Lotsen (VATSIM, alle 60 s) + SimBrief-Route, Prüfung alle 30 s */
+  let route = null, ctl = [];
+  const sectors = makeSectors();
+  sectors.load().then(() => log('Sektordaten (VATSpy) geladen.')).catch(e => log('Sektordaten nicht geladen:', e.message));
+  const pullCtl = async () => { try { const j = await (await fetch('https://data.vatsim.net/v3/vatsim-data.json')).json(); ctl = (j.controllers || []).filter(c => c.facility > 0 && c.frequency !== '199.998'); } catch { } };
+  pullCtl(); setInterval(pullCtl, 60000);
+  setInterval(() => {
+    if (!sectors.ok || mon.st.lat == null) return;
+    const me = [mon.st.lat, mon.st.lon];
+    mon.sector({ cur: sectors.covers(me, ctl), next: sectors.next(me, route, ctl) });
+  }, 30000);
   if (cfg.simbriefUser) {
-    try { const s = await loadTod(cfg.simbriefUser); mon.setTod(s.tod); log(`SimBrief: ${s.flight} · TOD ${s.tod ? 'gefunden' : 'nicht im OFP'}`); }
+    try { const s = await loadTod(cfg.simbriefUser); mon.setTod(s.tod); route = s.wps; log(`SimBrief: ${s.flight} · TOD ${s.tod ? 'gefunden' : 'nicht im OFP'} · ${s.wps.length} Wegpunkte`); }
     catch (e) { log('SimBrief nicht geladen:', e.message); }
   } else log('Kein SimBrief-Name in config.json – TOD-Alarm aus.');
   const sim = connectSim(cfg, mon);

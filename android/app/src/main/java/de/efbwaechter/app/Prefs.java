@@ -9,9 +9,11 @@ import org.json.JSONObject;
 /** Einstellungen, Alarm-Verlauf und letzter PC-Status. */
 final class Prefs {
     static final String SERVER = "https://ntfy.sh";
-    /** Alarmarten (Tag „efb-<kind>“ von der PC-Bridge) und Standard: 0 = aus, 1 = Nachricht, 2 = Wecker */
-    static final String[] KINDS = {"tod", "warning", "ap", "away", "caution", "pause", "test", "info"};
-    static final int[] DEF = {2, 2, 2, 2, 1, 1, 1, 0};
+    /** Alarmarten (Tag „efb-<kind>“ von der PC-Bridge) und Standard:
+     *  0 = aus, 1 = Nachricht, 2 = Wecker nur im Weg-Modus (sonst Nachricht), 3 = immer Wecker */
+    static final String[] KINDS = {"tod", "sector", "warning", "ap", "away", "caution", "pause", "test", "info"};
+    static final int[] DEF = {2, 2, 2, 2, 3, 1, 1, 1, 0};
+    private static final String MODE_KEY = "m2_";        // neues Schema (v0.2) – alte Einstellungen „mode_“ gelten nicht mehr
 
     private Prefs() {}
     static SharedPreferences p(Context c) { return c.getSharedPreferences("efb", Context.MODE_PRIVATE); }
@@ -22,9 +24,14 @@ final class Prefs {
     static int mode(Context c, String kind) {
         int d = 1;
         for (int i = 0; i < KINDS.length; i++) if (KINDS[i].equals(kind)) d = DEF[i];
-        return p(c).getInt("mode_" + kind, d);
+        return p(c).getInt(MODE_KEY + kind, d);
     }
-    static void mode(Context c, String kind, int m) { p(c).edit().putInt("mode_" + kind, m).apply(); }
+    static void mode(Context c, String kind, int m) { p(c).edit().putInt(MODE_KEY + kind, m).apply(); }
+
+    /** Weg-Modus laut letztem Status der PC-Bridge */
+    static boolean away(Context c) {
+        try { return new JSONObject(status(c)).optBoolean("away", false); } catch (Exception e) { return false; }
+    }
 
     static String lastId(Context c) { return p(c).getString("lastId", ""); }
     static void lastId(Context c, String id) { p(c).edit().putString("lastId", id).apply(); }

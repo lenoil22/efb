@@ -137,7 +137,9 @@ public class WatchService extends Service {
         JSONArray tags = m.optJSONArray("tags");
         if (tags != null) for (int i = 0; i < tags.length(); i++) { String g = tags.optString(i); if (g.startsWith("efb-")) kind = g.substring(4); }
         String title = m.optString("title", "EFB"), msg = m.optString("message", "");
-        int mode = Prefs.mode(this, kind);
+        int set = Prefs.mode(this, kind);
+        // 2 = Wecker nur, wenn du weg bist (Weg-Modus der PC-Bridge) – am PC reicht eine Nachricht
+        int mode = set == 3 ? 2 : set == 2 ? (Prefs.away(this) ? 2 : 1) : set;
         boolean fresh = Prefs.addHistory(this, id, t, kind, title, msg, mode);
         ui();
         if (!fresh || System.currentTimeMillis() - t > 120000) return;   // alte Meldungen beim Wiederverbinden: nur in den Verlauf

@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
             Prefs.topic(MainActivity.this, t == null ? "" : t.trim());
             WatchService.reconnect();
         }
-        @JavascriptInterface public void setMode(String kind, int mode) { Prefs.mode(MainActivity.this, kind, Math.max(0, Math.min(2, mode))); }
+        @JavascriptInterface public void setMode(String kind, int mode) { Prefs.mode(MainActivity.this, kind, Math.max(0, Math.min(3, mode))); }
         @JavascriptInterface public void send(String cmd) { if ("weg".equals(cmd) || "da".equals(cmd)) WatchService.sendCmd(MainActivity.this, cmd); }
         @JavascriptInterface public void testAlarm(String kind) {
             runOnUiThread(() -> { WatchService s = WatchService.inst; if (s != null) s.ring("test", "Wecker-Test", "So klingt der Wecker. Tippe „Bin dran“."); });

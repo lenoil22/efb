@@ -26,10 +26,10 @@ h3{font-size:11px;letter-spacing:.07em;color:var(--dim);font-weight:400;margin:2
 .sub{font-size:13px;color:var(--dim);margin:0}
 .rows div{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line)}.rows div:first-child{border-top:0}
 .rows b{font-weight:400;color:var(--dim)}.ok{color:var(--g)}.no{color:var(--a)}.off{color:var(--mut)}
-.al{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.al:first-child{border-top:0}
-.al span{flex:1;font-size:14px}
+.al{padding:10px 0;border-top:1px solid var(--line)}.al:first-child{border-top:0}
+.al span{display:block;font-size:14px;margin-bottom:6px}
 .seg{display:flex;border:1px solid var(--line);border-radius:99px;overflow:hidden}
-.seg button{font-size:12px;padding:7px 10px;color:var(--dim);min-height:34px}
+.seg button{flex:1;font-size:12px;padding:7px 4px;color:var(--dim);min-height:36px;line-height:1.2}
 .seg button.sel{background:var(--ink);color:var(--bg)}.seg button.sel.w{background:var(--a)}
 .hist div{padding:7px 0;border-top:1px solid var(--line);font-size:13px}.hist div:first-child{border-top:0}
 .hist i{font-style:normal;color:var(--mut);font-family:"B612 Mono",monospace;margin-right:8px}
@@ -44,6 +44,10 @@ input{font:15px "B612 Mono",monospace;background:var(--bg);color:var(--ink);bord
 .fdg div span.s{font-size:18px;color:var(--ink)}
 .prog{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:14px}
 .prog .tod{color:var(--a)}
+.fdg .tm{border-top:1px solid var(--line);padding-top:10px}
+.fdg .tm span.tod{color:var(--a)}
+.fdg .tm span small{font-size:12px;color:var(--mut);font-weight:400}
+.fdg .tm i{display:block;font-style:normal;font-size:12px;color:var(--dim)}
 .st{padding:9px 0;border-top:1px solid var(--line)}.st:first-child{border-top:0}
 .st small{display:block;font-size:11px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
 .st .n{font-size:16px}.st .f{font:700 22px "B612 Mono",monospace;color:var(--g);float:right;margin-top:-4px}
@@ -75,7 +79,7 @@ input{font:15px "B612 Mono",monospace;background:var(--bg);color:var(--ink);bord
   <div id="appOnly">
     <h3>Alarme</h3>
     <div class="card" id="alarms"></div>
-    <p class="msg">Wecker = klingelt im Vollbild über die Wecker-Lautstärke, bis du „Bin dran“ tippst.</p>
+    <p class="msg">Wecker = klingelt im Vollbild über die Wecker-Lautstärke, bis du „Bin dran“ tippst. „Wecker, wenn weg“ = nur im Weg-Modus ein Wecker, sonst eine normale Nachricht.</p>
     <div style="margin-top:10px"><button class="btn" id="testW">Wecker testen</button></div>
 
     <h3>Einrichtung</h3>
@@ -94,8 +98,9 @@ input{font:15px "B612 Mono",monospace;background:var(--bg);color:var(--ink);bord
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const APP=window.EFBApp||null;
-const KINDS=[['tod','Top of Descent'],['warning','Master Warning'],['ap','Autopilot aus'],['away','Weg-Modus abgelaufen'],['caution','Master Caution'],['pause','Sim pausiert'],['test','Test vom PC'],['info','Infos (Bridge gestartet …)']];
-const MODES=['Aus','Nachricht','Wecker'];
+const KINDS=[['tod','Top of Descent'],['sector','Neuer Lotse voraus'],['warning','Master Warning'],['ap','Autopilot aus'],['away','Weg-Modus abgelaufen'],['caution','Master Caution'],['pause','Sim pausiert'],['test','Test vom PC'],['info','Infos (Bridge gestartet …)']];
+/* 2 = Wecker nur im Weg-Modus, sonst Nachricht (am PC hört man es ja selbst) */
+const MODES=['Aus','Nachricht','Wecker, wenn weg','Immer Wecker'];
 const NTFY='https://ntfy.sh';
 let S={topic:'',modes:{},history:[],status:null,connected:false,fsi:true,battery:true,notif:true};
 
@@ -144,7 +149,7 @@ function render(){
   // Alarme
   if(APP){
     $('#alarms').innerHTML=KINDS.map(([k,n])=>{const m=S.modes[k]??0;
-      return`<div class="al"><span>${esc(n)}</span><div class="seg">${MODES.map((t,i)=>`<button data-k="${k}" data-m="${i}" class="${i===m?'sel'+(i===2?' w':''):''}">${t}</button>`).join('')}</div></div>`}).join('');
+      return`<div class="al"><span>${esc(n)}</span><div class="seg">${MODES.map((t,i)=>`<button data-k="${k}" data-m="${i}" class="${i===m?'sel'+(i>=2?' w':''):''}">${t}</button>`).join('')}</div></div>`}).join('');
     const fx=[[S.notif,'Benachrichtigungen erlaubt','notif'],[S.fsi,'Vollbild-Wecker erlaubt','fsi'],[S.battery,'Akku-Optimierung aus (App läuft im Hintergrund)','battery']];
     $('#fixes').innerHTML=fx.map(([ok,t,a])=>`<div class="fix"><span>${t}</span>${ok?'<span class="ok" style="flex:none">✓</span>':`<button class="btn" data-fix="${a}">Erlauben</button>`}</div>`).join('');
   }
@@ -190,10 +195,14 @@ async function loadPlan(){
     if(j.fetch&&j.fetch.status&&j.fetch.status!=='Success')throw new Error(j.fetch.status);
     let fx=j.navlog?.fix||[];if(!Array.isArray(fx))fx=[fx];
     const g=j.general||{},tod=fx.find(x=>String(x.ident).toUpperCase()==='TOD');
+    /* Strecke entlang der Route: „distance“ = Länge des Abschnitts zum Punkt → aufsummieren */
+    let cum=0;const all=fx.map(x=>{cum+=+x.distance||0;return{x,cum}});const total=cum;
+    const todCum=tod?all.find(a=>a.x===tod).cum:null;
     FD.plan={cs:(j.atc?.callsign||((g.icao_airline||'')+(g.flight_number||''))).toUpperCase(),dep:j.origin?.icao_code||'',arr:j.destination?.icao_code||'',
       depPos:j.origin?.pos_lat?[+j.origin.pos_lat,+j.origin.pos_long]:null,arrPos:j.destination?.pos_lat?[+j.destination.pos_lat,+j.destination.pos_long]:null,
       depElev:+(j.origin?.elevation||0),arrElev:+(j.destination?.elevation||0),crz:+(g.initial_altitude||0),ta:+(j.origin?.trans_alt||5000),tl:+(j.destination?.trans_level||7000),
-      wps:fx.filter(x=>x.pos_lat&&x.type!=='apt').map(x=>[+x.pos_lat,+x.pos_long,x.ident]),tod:tod?[+tod.pos_lat,+tod.pos_long]:null};
+      wps:all.filter(a=>a.x.pos_lat&&a.x.type!=='apt').map(a=>[+a.x.pos_lat,+a.x.pos_long,a.x.ident,a.cum]),tod:tod?[+tod.pos_lat,+tod.pos_long]:null,
+      total:total||null,todCum};
     FD.planErr='';FD.sbLoaded=u;
   }catch(e){FD.planErr='SimBrief: '+(e.message||e)}
 }
@@ -275,13 +284,33 @@ function render(){
   const p=FD.p;
   if(!p){fd.innerHTML=`<p class="sub">${esc(P.cs)} ist gerade nicht mit VATSIM verbunden.${FD.err?' (VATSIM nicht erreichbar)':''}</p>`}
   else{
-    const me=[p.latitude,p.longitude],dA=nm(me,P.arrPos),vs=FD.vs;
-    let prog=dA!=null?`Noch <b>${Math.round(dA)} NM</b> bis ${esc(P.arr)}${p.groundspeed>80?` · ETA in ${Math.round(dA/p.groundspeed*60)} min`:''}`:'';
-    if(P.tod&&p.groundspeed>100){const dT=nm(me,P.tod);const ph=phase();
-      if(dT!=null&&dA!=null&&dA>nm(P.tod,P.arrPos)-1&&!/Sinkflug|Anflug|Endanflug/.test(ph))prog+=`<br><span class="tod">TOD in ${Math.max(0,Math.round(dT/p.groundspeed*60))} min (${Math.round(dT)} NM)</span>`;}
-    fd.innerHTML=`<div class="fdg"><div><b>Höhe</b><span>${alt(p.altitude,p.groundspeed)}</span></div><div><b>Geschwindigkeit</b><span>${p.groundspeed} kt</span></div>`+
-      `<div><b>Steigen / Sinken</b><span class="s">${vs==null?'–':(vs>0?'+':'')+vs+' ft/min'}</span></div><div><b>Phase</b><span class="s">${esc(phase())}</span></div></div>`+
-      (prog?`<div class="prog">${prog}</div>`:'');
+    const me=[p.latitude,p.longitude],vs=FD.vs,gs=p.groundspeed,ph=phase();
+    /* Rest entlang der Route: zum nächsten Wegpunkt + aufsummierte Abschnitte bis zum Ziel bzw. TOD-Punkt.
+       (Luftlinie täuscht: der TOD kann geografisch nah am Platz liegen, wenn die STAR eine Schleife fliegt.) */
+    const W=P.wps||[];let dA=nm(me,P.arrPos),todFromArr=null;
+    if(W.length&&P.total){
+      let bi=0,bd=1e9;W.forEach((w,i)=>{const d=nm(me,w);if(d<bd){bd=d;bi=i}});
+      let nx=bi;if(bi<W.length-1&&nm(me,W[bi+1])<nm(W[bi],W[bi+1]))nx=bi+1;
+      const base=nm(me,W[nx])-W[nx][3];                     // Rest bis Punkt X = cum[X] + base
+      dA=P.total+base;
+      const todCum=P.todCum!=null?P.todCum:P.crz?P.total-Math.max(0,(P.crz-P.arrElev)*3/1000):null;
+      if(todCum!=null)todFromArr=P.total-todCum;
+    }else if(P.crz)todFromArr=Math.max(0,(P.crz-P.arrElev)*3/1000);
+    /* groß: „in X min“ (sofort lesbar), klein darunter: Uhrzeit lokal + UTC und Entfernung */
+    const clock=min=>{const d=new Date(Date.now()+min*60000);return`${d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr (${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}z)`};
+    const inMin=m=>m<1?'jetzt':m<90?`in ${Math.round(m)} min`:`in ${Math.floor(m/60)} h ${String(Math.round(m%60)).padStart(2,'0')}`;
+    let eta='–',etaSub='',tod='–',todSub='';
+    if(dA!=null&&gs>80){const m=dA/gs*60;eta=inMin(m);etaSub=`${clock(m)} · ${Math.round(dA)} NM`}
+    else if(dA!=null)etaSub=`${Math.round(dA)} NM bis ${esc(P.arr)}`;
+    if(todFromArr!=null&&dA!=null){
+      const dT=dA-todFromArr;
+      if(dT<=1||/Sinkflug|Anflug|Endanflug|Landung|rollt nach|Stand/.test(ph)&&p.altitude<(P.crz||99999)-1500){tod='passiert';todSub='im Sinkflug'}
+      else if(gs>80){const m=dT/gs*60;tod=inMin(m);todSub=`${clock(m)} · ${Math.round(dT)} NM`}
+      else todSub=`${Math.round(todFromArr)} NM vor ${esc(P.arr)}`;
+    }
+    fd.innerHTML=`<div class="fdg"><div><b>Höhe</b><span>${alt(p.altitude,gs)}</span></div><div><b>Geschwindigkeit</b><span>${gs} kt</span></div>`+
+      `<div><b>Steigen / Sinken</b><span class="s">${vs==null?'–':(vs>0?'+':'')+vs+' ft/min'}</span></div><div><b>Phase</b><span class="s">${esc(ph)}</span></div>`+
+      `<div class="tm"><b>TOD</b><span class="s tod">${tod}</span><i>${todSub}</i></div><div class="tm"><b>ETA ${esc(P.arr)}</b><span class="s">${eta}</span><i>${etaSub}</i></div></div>`;
   }
   // Lotsen
   if(SEC.st==='load'||SEC.st===''){atc.innerHTML='<p class="sub">Sektordaten werden geladen …</p>';return}

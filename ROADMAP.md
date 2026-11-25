@@ -1,6 +1,6 @@
 # Fahrplan
 
-**Reihenfolge (Stand 2026-11-25):** A1–A4 sind gebaut. **Teil B, Schritt 1** (PC-Bridge `bridge/` + ntfy: Master Warning/Caution, AP aus, Pause, TOD, Weg-Modus) ist gebaut, aber noch nicht am Sim getestet. Dazu die Tray-App `EFB-Bridge.exe` mit MSFS-Autostart. **Handy-App „EFB Wächter“ Schritt 1** (Wecker, Alarme einstellbar, Weg/Zurück, Verlauf, Koppeln per QR) ist gebaut und im Emulator getestet. **Schritt 2 – Flugdaten in der App** (Höhe, GS, V/S, Phase, TOD, aktueller/nächster Lotse, Ziel-ATC) ist gebaut. Offen in B: vPilot „Contact me“ / private Nachrichten, Sektor-Warnung „in X min neuer Lotse“. A5–A9 kommen später.
+**Reihenfolge (Stand 2026-11-25):** A1–A4 sind gebaut. **Teil B, Schritt 1** (PC-Bridge `bridge/` + ntfy: Master Warning/Caution, AP aus, Pause, TOD, Weg-Modus) ist gebaut, aber noch nicht am Sim getestet. Dazu die Tray-App `EFB-Bridge.exe` mit MSFS-Autostart. **Handy-App „EFB Wächter“ Schritt 1** (Wecker, Alarme einstellbar, Weg/Zurück, Verlauf, Koppeln per QR) ist gebaut und im Emulator getestet. **Schritt 2 – Flugdaten in der App** (Höhe, GS, V/S, Phase, TOD, aktueller/nächster Lotse, Ziel-ATC) ist gebaut. Sektor-Warnung „in X min neuer Lotse“ und Alarm-Modus „Wecker nur im Weg-Modus“ sind gebaut. Offen in B: vPilot „Contact me“ / private Nachrichten. A5–A9 kommen später.
 
 ## A. iPad-EFB (index.html) – vom Nutzer freigegeben, noch nicht gebaut
 1. **Bildschirm bleibt an** – Screen Wake Lock API (Safari ≥ 16.4), Schalter in Einstellungen (Standard an), nach Tab-Wechsel neu anfordern.
