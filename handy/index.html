@@ -38,6 +38,17 @@ h3{font-size:11px;letter-spacing:.07em;color:var(--dim);font-weight:400;margin:2
 input{font:15px "B612 Mono",monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
 .hide{display:none}
 .msg{font-size:12px;color:var(--dim);margin:8px 0 0}
+.fdg{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.fdg div b{display:block;font-size:11px;font-weight:400;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
+.fdg div span{font:700 26px/1.15 "B612 Mono",monospace;color:var(--g)}
+.fdg div span.s{font-size:18px;color:var(--ink)}
+.prog{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:14px}
+.prog .tod{color:var(--a)}
+.st{padding:9px 0;border-top:1px solid var(--line)}.st:first-child{border-top:0}
+.st small{display:block;font-size:11px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
+.st .n{font-size:16px}.st .f{font:700 22px "B612 Mono",monospace;color:var(--g);float:right;margin-top:-4px}
+.st .x{font-size:12px;color:var(--mut)}
+.st.nx .f{color:var(--c)}
 </style>
 </head>
 <body>
@@ -55,8 +66,11 @@ input{font:15px "B612 Mono",monospace;background:var(--bg);color:var(--ink);bord
   <h3>PC und Sim</h3>
   <div class="card rows" id="stat"></div>
 
-  <h3>Flugdaten</h3>
-  <div class="card"><p class="sub">Kommt im nächsten Schritt: Höhe, Geschwindigkeit, Phase, TOD und Lotsen live aus VATSIM.</p></div>
+  <h3>Flugdaten <span id="fdT" style="text-transform:none;letter-spacing:0"></span></h3>
+  <div class="card" id="fd"><p class="sub">Lädt …</p></div>
+
+  <h3>Lotsen</h3>
+  <div class="card" id="atc"><p class="sub">Lädt …</p></div>
 
   <div id="appOnly">
     <h3>Alarme</h3>
@@ -153,7 +167,145 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#unpair')){if(APP)APP.setTopic('');else{location.hash='';localStorage.removeItem('efb.topic');S.topic=''}load();return}
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
+window.efbStatus=()=>S.status;
 load();browserListen();
+}
+</script>
+
+<script>
+/* ---------- Flugdaten live: SimBrief-Plan + VATSIM-Feed + VATSpy-Sektoren ----------
+   Gleiche Logik wie im iPad-EFB („Wo bin ich?“ A3, „Nächste Frequenz“ A4), hier kompakt fürs Handy.
+   Der SimBrief-Name kommt von der PC-Bridge (Status „sb“) oder wird hier eingetragen. */
+{
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const FD={plan:null,planErr:'',sbLoaded:'',p:null,vs:null,prev:null,ctl:[],atis:[],t:0,err:false};
+const sbName=()=>{const st=window.efbStatus&&window.efbStatus();return(localStorage.getItem('efb.sb')||st&&st.sb||'').trim()};
+
+/* SimBrief: Callsign, Plätze, Route, TOD-Punkt */
+async function loadPlan(){
+  const u=sbName();if(!u){FD.plan=null;FD.planErr='';return}
+  try{
+    const j=await(await fetch('https://www.simbrief.com/api/xml.fetcher.php?json=1&username='+encodeURIComponent(u))).json();
+    if(j.fetch&&j.fetch.status&&j.fetch.status!=='Success')throw new Error(j.fetch.status);
+    let fx=j.navlog?.fix||[];if(!Array.isArray(fx))fx=[fx];
+    const g=j.general||{},tod=fx.find(x=>String(x.ident).toUpperCase()==='TOD');
+    FD.plan={cs:(j.atc?.callsign||((g.icao_airline||'')+(g.flight_number||''))).toUpperCase(),dep:j.origin?.icao_code||'',arr:j.destination?.icao_code||'',
+      depPos:j.origin?.pos_lat?[+j.origin.pos_lat,+j.origin.pos_long]:null,arrPos:j.destination?.pos_lat?[+j.destination.pos_lat,+j.destination.pos_long]:null,
+      depElev:+(j.origin?.elevation||0),arrElev:+(j.destination?.elevation||0),crz:+(g.initial_altitude||0),ta:+(j.origin?.trans_alt||5000),tl:+(j.destination?.trans_level||7000),
+      wps:fx.filter(x=>x.pos_lat&&x.type!=='apt').map(x=>[+x.pos_lat,+x.pos_long,x.ident]),tod:tod?[+tod.pos_lat,+tod.pos_long]:null};
+    FD.planErr='';FD.sbLoaded=u;
+  }catch(e){FD.planErr='SimBrief: '+(e.message||e)}
+}
+/* VATSIM alle 15 s */
+async function pull(){
+  try{
+    const j=await(await fetch('https://data.vatsim.net/v3/vatsim-data.json',{cache:'no-store'})).json();
+    FD.ctl=(j.controllers||[]).filter(c=>c.facility>0&&c.frequency!=='199.998');FD.atis=j.atis||[];FD.err=false;FD.t=Date.now();
+    const cs=FD.plan?.cs;const p=cs?(j.pilots||[]).find(x=>String(x.callsign).toUpperCase()===cs):null;
+    if(p&&Date.now()-Date.parse(p.last_updated)<180000){
+      const t=Date.parse(p.last_updated);
+      if(FD.prev&&t>FD.prev.t)FD.vs=Math.round((p.altitude-FD.prev.alt)/((t-FD.prev.t)/60000));
+      if(!FD.prev||t>FD.prev.t)FD.prev={alt:p.altitude,t};FD.p=p;
+    }else{FD.p=null;FD.vs=null;FD.prev=null}
+  }catch(e){FD.err=true}
+  render();
+}
+const nm=(a,b)=>{if(!a||!b)return null;const R=3440.065,r=x=>x*Math.PI/180,dl=r(b[0]-a[0]),dn=r(b[1]-a[1]);const h=Math.sin(dl/2)**2+Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+const alt=(a,gs)=>gs<40?'Boden':a>=(FD.plan?.ta||5000)?'FL'+String(Math.round(a/100)).padStart(3,'0'):Math.round(a/100)*100+' ft';
+function phase(){
+  const p=FD.p,P=FD.plan;if(!p)return'';const me=[p.latitude,p.longitude],dD=nm(me,P.depPos),dA=nm(me,P.arrPos);
+  const atArr=dA!=null&&(dD==null||dA<dD),agl=p.altitude-(atArr?P.arrElev:P.depElev),vs=FD.vs??0;
+  if(p.groundspeed<40)return atArr?(p.groundspeed<3?'am Stand':'rollt nach der Landung'):(p.groundspeed<3?'am Gate':'rollt');
+  if(!atArr&&dD<8&&agl<1500)return'Start';if(atArr&&dA<10&&agl<3000)return'Endanflug';if(atArr&&dA<25&&agl<6000)return'Anflug';
+  if(vs>300)return'Steigflug';if(vs<-300)return'Sinkflug';return p.altitude>=10000?'Reiseflug':atArr?'Sinkflug':'Steigflug';
+}
+
+/* Sektoren (VATSpy) – wie A4 */
+const VSP='https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/';
+const SEC={st:'',firs:[],uirs:{},poly:{},map:{}};
+async function vspGet(n){const u=VSP+n;let c=null;try{c=await caches.open('efb-vatspy')}catch(e){}
+  if(c){const r=await c.match(u);if(r&&Date.now()-Date.parse(r.headers.get('date')||0)<7*864e5)return r.text()}
+  const r=await fetch(u);if(!r.ok)throw new Error(n);if(c)try{await c.put(u,r.clone())}catch(e){}return r.text()}
+async function loadSectors(){
+  if(SEC.st)return;SEC.st='load';
+  try{const[dat,geo]=await Promise.all([vspGet('VATSpy.dat'),vspGet('Boundaries.geojson')]);let sec='';
+    for(const raw of dat.split(/\r?\n/)){const l=raw.trim();if(!l||l[0]===';')continue;if(l[0]==='['){sec=l;continue}const p=l.split('|');
+      if(sec==='[FIRs]'&&p.length>=4)SEC.firs.push({icao:p[0],name:p[1],pre:p[2]||p[0],bnd:p[3]||p[0]});
+      if(sec==='[UIRs]'&&p.length>=3)SEC.uirs[p[0]]={name:p[1],firs:p[2].split(',')}}
+    for(const ft of JSON.parse(geo).features){const g=ft.geometry,id=ft.properties.id;if(!g)continue;const polys=g.type==='MultiPolygon'?g.coordinates:[g.coordinates];
+      (SEC.poly[id]=SEC.poly[id]||[]).push(...polys.map(pl=>{const ring=pl[0];let a=1e9,b=-1e9,c=1e9,d=-1e9;for(const[x,y]of ring){a=Math.min(a,x);b=Math.max(b,x);c=Math.min(c,y);d=Math.max(d,y)}return{ring,bb:[a,b,c,d]}}))}
+    SEC.st='ok'}catch(e){SEC.st='err'}
+  render();
+}
+function inPoly(lat,lon,P){const[a,b,c,d]=P.bb;if(lon<a||lon>b||lat<c||lat>d)return false;let r=false;const R=P.ring;for(let i=0,j=R.length-1;i<R.length;j=i++){const[xi,yi]=R[i],[xj,yj]=R[j];if((yi>lat)!==(yj>lat)&&lon<(xj-xi)*(lat-yi)/(yj-yi)+xi)r=!r}return r}
+const inBnd=(id,pt)=>(SEC.poly[id]||[]).some(P=>inPoly(pt[0],pt[1],P));
+function ctlSec(cs){
+  if(SEC.map[cs])return SEC.map[cs];const p=cs.toUpperCase().split('_'),p1=p[0],p2=p.length>2?p[0]+'_'+p[1]:'';
+  let rows=p2?SEC.firs.filter(f=>f.pre===p2):[],rank=3;
+  if(!rows.length){rows=SEC.firs.filter(f=>f.pre===p1&&f.bnd===f.icao);rank=2}
+  if(!rows.length){rows=SEC.firs.filter(f=>f.pre===p1);rank=2}
+  if(!rows.length&&SEC.uirs[p1]){const u=SEC.uirs[p1];rows=u.firs.map(i=>SEC.firs.find(f=>f.icao===i&&f.bnd===i)||SEC.firs.find(f=>f.icao===i)).filter(Boolean).map(f=>({...f,name:u.name}));rank=1}
+  let n=(rows[0]?.name||p1).split(' - ')[0].trim().replace(/\bACC\b/,'Radar');if(!/radar|control|centre|center|information/i.test(n))n=n.replace(/^([^(]*?)(\s*\(|$)/,'$1 Radar$2');
+  return SEC.map[cs]={bnd:[...new Set(rows.map(r=>r.bnd))],rank,d:n};
+}
+const ifrCtr=c=>(c.facility===6||c.facility===1)&&!/_FIS_/.test(c.callsign);
+function covers(pt){
+  if(SEC.st!=='ok'||!pt)return[];
+  const out=FD.ctl.filter(ifrCtr).map(c=>({c,m:ctlSec(c.callsign)})).filter(x=>x.m.bnd.some(id=>inBnd(id,pt)));
+  const top=Math.max(0,...out.map(x=>x.m.rank));return out.filter(x=>x.m.rank===top).map(x=>({cs:x.c.callsign,freq:x.c.frequency,d:x.m.d}));
+}
+const pre=c=>c.callsign.split('_')[0];
+const ROLE={2:'Delivery',3:'Ground',4:'Tower',5:'Approach'};
+/* Platz: wer ist dort online (DEL/GND/TWR/APP) + ATIS */
+function airport(icao){
+  icao=(icao||'').toUpperCase();if(!icao)return null;
+  const l=FD.ctl.filter(c=>pre(c)===icao&&c.facility>=2&&c.facility<=5).sort((a,b)=>b.facility-a.facility);
+  const at=FD.atis.find(x=>pre(x)===icao);
+  return{icao,list:l,atis:at?(at.atis_code||'?'):''};
+}
+
+/* Anzeige */
+function render(){
+  const fd=$('#fd'),atc=$('#atc');if(!fd)return;
+  const P=FD.plan,u=sbName();
+  if(!u){fd.innerHTML=`<p class="sub" style="margin-bottom:8px">SimBrief-Name fehlt (kommt sonst von der PC-Bridge).</p><div style="display:flex;gap:8px"><input id="sbIn" placeholder="SimBrief-Benutzername" autocapitalize="off"><button class="btn" id="sbSave">OK</button></div>`;atc.innerHTML='<p class="sub">–</p>';return}
+  if(!P){fd.innerHTML=`<p class="sub">${esc(FD.planErr||'Lade SimBrief-Plan …')}</p>`;return}
+  $('#fdT').textContent=`· ${P.cs} ${P.dep} → ${P.arr}`;
+  const p=FD.p;
+  if(!p){fd.innerHTML=`<p class="sub">${esc(P.cs)} ist gerade nicht mit VATSIM verbunden.${FD.err?' (VATSIM nicht erreichbar)':''}</p>`}
+  else{
+    const me=[p.latitude,p.longitude],dA=nm(me,P.arrPos),vs=FD.vs;
+    let prog=dA!=null?`Noch <b>${Math.round(dA)} NM</b> bis ${esc(P.arr)}${p.groundspeed>80?` · ETA in ${Math.round(dA/p.groundspeed*60)} min`:''}`:'';
+    if(P.tod&&p.groundspeed>100){const dT=nm(me,P.tod);const ph=phase();
+      if(dT!=null&&dA!=null&&dA>nm(P.tod,P.arrPos)-1&&!/Sinkflug|Anflug|Endanflug/.test(ph))prog+=`<br><span class="tod">TOD in ${Math.max(0,Math.round(dT/p.groundspeed*60))} min (${Math.round(dT)} NM)</span>`;}
+    fd.innerHTML=`<div class="fdg"><div><b>Höhe</b><span>${alt(p.altitude,p.groundspeed)}</span></div><div><b>Geschwindigkeit</b><span>${p.groundspeed} kt</span></div>`+
+      `<div><b>Steigen / Sinken</b><span class="s">${vs==null?'–':(vs>0?'+':'')+vs+' ft/min'}</span></div><div><b>Phase</b><span class="s">${esc(phase())}</span></div></div>`+
+      (prog?`<div class="prog">${prog}</div>`:'');
+  }
+  // Lotsen
+  if(SEC.st==='load'||SEC.st===''){atc.innerHTML='<p class="sub">Sektordaten werden geladen …</p>';return}
+  const W=P.wps||[];let pt=null,start=0;
+  if(p&&p.groundspeed>=40){pt=[p.latitude,p.longitude];let bi=-1,bd=1e9;W.forEach((w,i)=>{const d=nm(pt,w);if(d<bd){bd=d;bi=i}});start=bi+1}
+  else pt=(p?[p.latitude,p.longitude]:null)||P.depPos;
+  const cur=covers(pt),curCs=new Set(cur.map(x=>x.cs));let next=null,dist=0,prevPt=pt;
+  for(let k=start;k<W.length;k++){dist+=nm(prevPt,W[k])||0;prevPt=W[k];const cv=covers(W[k]);if(cv.length&&!cv.some(x=>curCs.has(x.cs))){next={...cv[0],alt:cv.slice(1),at:W[k][2],dist};break}}
+  const row=(cls,lbl,x,extra)=>`<div class="st ${cls}"><small>${lbl}</small><span class="f">${esc(x.freq)}</span><div class="n">${esc(x.d)}</div><div class="x">${esc(x.cs)}${extra||''}</div></div>`;
+  let h='';
+  if(cur.length)h+=cur.map((x,i)=>row('',i?'Auch zuständig':'Jetzt',x)).join('');
+  else h+=`<div class="st"><small>Jetzt</small><div class="n">Kein Center online</div><div class="x">Unicom 122.800</div></div>`;
+  if(next)h+=row('nx','Als Nächstes',next,` · ${next.dist>0?'in '+Math.round(next.dist)+' NM ':''}ab ${esc(next.at)}`);
+  const ap=airport(P.arr);
+  if(ap){h+=`<div class="st"><small>Ziel ${esc(ap.icao)}${ap.atis?' · ATIS '+esc(ap.atis):''}</small>${ap.list.length?ap.list.map(c=>`<div class="x" style="font-size:14px;color:var(--ink)">${ROLE[c.facility]||''} <span class="mono" style="color:var(--g)">${esc(c.frequency)}</span> <span style="color:var(--mut)">${esc(c.callsign)}</span></div>`).join(''):'<div class="x">Niemand online – Unicom</div>'}</div>`}
+  atc.innerHTML=h;
+}
+document.addEventListener('click',e=>{
+  if(e.target.closest('#sbSave')){const v=$('#sbIn').value.trim();if(v){localStorage.setItem('efb.sb',v);loadPlan().then(pull)}}
+});
+async function cycle(){ if(sbName()&&sbName()!==FD.sbLoaded)await loadPlan(); await pull(); }
+loadSectors();
+setTimeout(()=>{cycle();setInterval(cycle,15000)},800);   // kurz warten, bis der Status (SimBrief-Name) da ist
+setInterval(loadPlan,10*60000);
 }
 </script>
 </body>

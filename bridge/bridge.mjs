@@ -134,7 +134,9 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
       if (!name || !(name in d)) continue;
       const on = Number(d[name]) > 0;
       if (role === 'warning') {
-        if (on && !st.warn && cool('warn', 30000)) notify({ kind: 'warning', title: 'MASTER WARNING', message: 'Im Cockpit leuchtet Master Warning. Sofort an den PC.', priority: 5, tags: ['rotating_light'] });
+        // erst nach 3 s melden: beim AP-Disconnect leuchtet Master Warning mit – dann nur „Autopilot aus“ (tick)
+        if (on && !st.warn) st.warnPending = now();
+        if (!on) st.warnPending = 0;
         st.warn = on;
       } else if (role === 'caution') {
         if (on && !st.caut && cool('caut', 30000)) notify({ kind: 'caution', title: 'Master Caution', message: 'Im Cockpit leuchtet Master Caution.', priority: 4, tags: ['warning'] });
@@ -142,12 +144,19 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
       } else st[role] = on;
     }
     const apOn = st.ap1 || st.ap2;
+    if (st.apWasOn && !apOn) st.apOffAt = now();
     if (st.apWasOn && !apOn && !st.onGround && cool('ap', 30000))
       notify({ kind: 'ap', title: 'Autopilot aus', message: `AP hat abgeschaltet (${Math.round(st.altFt / 100) * 100} ft). Sofort an den PC.`, priority: 5, tags: ['rotating_light'] });
     st.apWasOn = apOn;
   }
   function tick() {
     const t = now();
+    // Master Warning (verzögert): nicht doppelt, wenn sie nur vom AP-Disconnect kommt
+    if (st.warnPending && t - st.warnPending >= 3000) {
+      const fromAp = st.apOffAt && Math.abs(st.warnPending - st.apOffAt) < 6000;
+      if (st.warn && !fromAp && cool('warn', 30000)) notify({ kind: 'warning', title: 'MASTER WARNING', message: 'Im Cockpit leuchtet Master Warning. Sofort an den PC.', priority: 5, tags: ['rotating_light'] });
+      st.warnPending = 0;
+    }
     // Pause in der Luft
     if (st.paused) {
       if (!st.pausedSince) st.pausedSince = t;
@@ -293,7 +302,7 @@ async function main() {
   ntfy.send({ kind: 'info', title: 'EFB Bridge läuft', message: 'Push kommt an. Warnungen aus dem Sim landen hier.', priority: 2, tags: ['white_check_mark'] });
   /* Status: für die Tray-App (EFB-Bridge.exe) als Zeile „@status {…}“, für die Handy-App über den Status-Kanal */
   let lastStatus = '';
-  const pub = () => ({ on: true, ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, awaySince: mon.st.away ? mon.st.awaySince : 0, awayMin: cfg.awayMin });
+  const pub = () => ({ on: true, ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, awaySince: mon.st.away ? mon.st.awaySince : 0, awayMin: cfg.awayMin, sb: cfg.simbriefUser || '' });
   setInterval(() => {
     const s = JSON.stringify({ ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, topic: cfg.topic });
     if (s !== lastStatus) { lastStatus = s; console.log('@status ' + s); }

@@ -53,7 +53,9 @@ Sprache mit dem Nutzer: **Deutsch**. UI-Texte Deutsch, Funk-Phraseologie und Cal
 - `WatchService`: Vordergrunddienst (`specialUse`), ntfy-JSON-Stream auf `<topic>,<topic>-status`, Wiederaufnahme per `since=<lastId>`; alte Meldungen (> 2 min) nur in den Verlauf. Pro Alarmart (Tag `efb-<kind>`: tod, warning, ap, away, caution, pause, test, info) Modus 0 aus / 1 Nachricht / 2 **Wecker**: MediaPlayer mit `USAGE_ALARM` in Dauerschleife, Vibration, Full-Screen-Intent → `AlarmActivity` (auch auf dem Sperrbildschirm), „Bin dran“ schickt `da` an `<topic>-cmd`, Auto-Stopp nach 5 min.
 - Oberfläche = **`handy/index.html`** (GitHub Pages) in einer WebView, Schnittstelle `window.EFBApp` (state, setMode, send, testAlarm, setTopic, openFsi/openBattery/openNotif), die App ruft `efbUpdate()` bei Änderungen. Im normalen Browser läuft die Seite eingeschränkt (Status per SSE, Weg/Zurück per POST, Kanal hinter `#`).
 - Koppeln: `koppeln.html#<topic>` zeigt einen QR-Code `efbwaechter://pair?topic=…` (qrcodejs 1.0.0 von cdnjs). Die Tray-App öffnet ihn über „Handy koppeln“.
-- Bridge-Status für die App: `<topic>-status` nur bei Änderung (3 s gesammelt), weil ntfy.sh **250 Nachrichten/Tag** erlaubt. Live-Flugdaten holt die App selbst von VATSIM (Schritt 2).
+- Bridge-Status für die App: `<topic>-status` nur bei Änderung (3 s gesammelt), weil ntfy.sh **250 Nachrichten/Tag** erlaubt. Enthält `sb` (SimBrief-Name).
+- **Flugdaten (Schritt 2)** im zweiten `<script>` von `handy/index.html`: SimBrief-OFP (Callsign, Route, TOD-Fix) + VATSIM-Feed alle 15 s + VATSpy-Sektoren, kompakte Kopie der A3/A4-Logik aus `index.html` (bei Änderungen dort beide Stellen anpassen). Zeigt Höhe, GS, V/S, Phase, Restdistanz/ETA, TOD in X min, aktuellen und nächsten Center (mit Entfernung entlang der Route) und die Lotsen + ATIS am Ziel.
+- Master Warning wird erst nach 3 s gemeldet und nicht, wenn sie vom AP-Disconnect kommt (±6 s) – dann nur „Autopilot aus“.
 
 ## Deploy
 Push auf `main` → GitHub Pages baut neu (~1 min). Danach im Browser mit `?v=<n>` testen (Cache).
