@@ -34,7 +34,7 @@ Sprache mit dem Nutzer: **Deutsch**. UI-Texte Deutsch, Funk-Phraseologie und Cal
   - `ROLLE|ITEM|SETTING|Notiz` – Rolle PF, PM, CM (beide), BOTH
   - `@ROLLE|Callout|Notiz` – gesprochener Satz (eigene Rolle wird hervorgehoben)
   - `#ckid:down|below|all` – fügt Checkliste (Teil) ein
-  - `!funkphase:Anfrage|Label` – Link in den Funk-Tab
+  - `!funkphase:Anfrage|Label` – Funk-Kasten „wen jetzt rufen“ (Station + Live-Frequenz von VATSIM, sonst Unicom), Tipp öffnet den Funk-Tab. Steht an **jedem** Punkt, an dem man ATC anspricht oder übergeben wird (Delivery, Startup/Pushback, Taxi, Tower, Departure, Center, Sinkflug, Approach, Anflugfreigabe, Established, Tower, Ground, Taxi to stand)
   - `~` am Anfang = nur bei Detail „Voll“
   - `^` (nach `~`) = nur Realismus: im Sim schon so (Cold & Dark) oder reine Kontrolle → grau (Einstellung: Grau/Normal/Ausblenden). Nie für Hebel/Schalter, die man an Hardware zurückstellen muss (Gear, Thrust, ENG MASTER/MODE, Parking Brake, Flaps, Speedbrake, Rudder Trim, FCU/EFIS), und nicht für T.O/LDG MEMO und 3 GREEN.
   - Platzhalter `{flex}`, `{ta}`, `{tl}`, `{tod}`, `{qnhArr}` … werden aus dem Flug gefüllt.

@@ -93,6 +93,11 @@ a{color:var(--c)}
 .sec{font-size:11px;letter-spacing:.07em;color:var(--a);margin:18px 0 4px;padding-top:14px;border-top:1px solid var(--line)}
 .sec small{color:var(--mut);letter-spacing:0;margin-left:6px}
 .line{font-size:10px;letter-spacing:.07em;color:var(--a);text-align:center;border-top:1px solid #ffb02088;margin:8px 0 4px;padding-top:3px}
+.atc{display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin:10px 0;padding:9px 12px;border:1px solid #3cc8ff55;border-radius:10px;background:#0f1c27}
+.atcb{flex:none;font:700 10px "B612 Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:#04121c;background:var(--c);border-radius:4px;padding:2px 6px}
+.atct{flex:1;font-size:14px;line-height:1.35;color:var(--ink)}.atct b{color:var(--c);font-weight:700}
+.atct small{display:block;font:12px "B612 Mono",monospace;color:var(--g);margin-top:2px}
+.atcg{flex:none;color:var(--c);font-size:22px}
 .flink{display:block;width:100%;text-align:left;color:var(--c);font-size:13px;padding:7px 0 7px 32px}
 .fhint{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--a);margin:0 0 8px}
 .fhint span{flex:1;line-height:1.35}.fhint b{color:var(--ink);font-weight:400}
@@ -454,12 +459,22 @@ function stnCtx(role,side){
 /* ---------- Funk rendern ---------- */
 const INITROLE={DEP:['DEP','dep'],CTR:['CTR','dep'],APP:['APP','arr'],TWRarr:['TWR','arr'],GNDarr:['GND','arr'],DEL:['DEL','dep'],GND:['GND','dep'],TWRdep:['TWR','dep']};
 const TIPS={DEP:'Höhe, die du durchfliegst, freigegebene Höhe, SID oder Heading.',CTR:'Callsign, Höhe und was du gerade fliegst. Im Steig- oder Sinkflug: „passing … climbing …“.',APP:'Höhe, STAR und ATIS-Kennung des Zielplatzes.',TWRarr:'Anflugart und Piste – mehr nicht.',GNDarr:'Piste frei und gewünschter Stand.'};
+/* Welche Station spricht man bei dieser Anfrage an? → [Rolle, dep|arr] */
+function reqRole(ph,q){
+  if(q.clr)return['DEL','dep'];if(q.init)return INITROLE[q.init];
+  return[q.r==='DEP'?'DEP':q.r,(q.r==='APP'||ph==='landung'||ph==='anflug')?'arr':'dep'];
+}
+/* Funk-Zeile im Leitfaden: wen jetzt rufen (live von VATSIM, sonst Unicom) */
+function atcLine(fp,rq,label){
+  const q=(REQ[fp]||[]).find(x=>x.n===rq);if(!q)return'';
+  const[role,side]=reqRole(fp,q),st=stnCtx(role,side),c=st.c;
+  return`<button class="atc" data-gfunk="${esc(fp)}|${esc(rq)}"><span class="atcb">Funk</span><span class="atct"><b>${esc(st.d)}</b> – ${esc(label)}<small>${c?esc(c.freq)+' · '+esc(c.cs):'Niemand online · Unicom 122.800'}</small></span><span class="atcg">›</span></button>`;
+}
 function renderFunk(){
   $('#phases').innerHTML=PH.map(([k,n])=>`<button data-ph="${k}" class="${S.phase===k?'act':''}">${n}</button>`).join('');
   const ph=S.phase,reqs=REQ[ph];
   let qi=S.req&&S.req.startsWith(ph)?+S.req.slice(ph.length):0;if(!reqs[qi])qi=0;const q=reqs[qi];
-  let role,side;
-  if(q.clr){role='DEL';side='dep'}else if(q.init){[role,side]=INITROLE[q.init]}else{role=q.r==='DEP'?'DEP':q.r;side=(q.r==='APP'||ph==='landung'||ph==='anflug')?'arr':'dep'}
+  const[role,side]=reqRole(ph,q);
   const st=stnCtx(role,side);CTX={stn:st};const c=st.c;
   const icao=side==='arr'?F().arr:F().dep;const at=atisOf(icao,side);
   let h=`<p class="lbl" style="margin-top:0">Jetzt rufen</p><div class="stn-name">${esc(st.d)}</div>`;
@@ -600,8 +615,8 @@ PF|OXYGEN CREW SUPPLY|ON
 
 {id:'ped',n:'Cockpit Preparation – Pedestal & MCDU',f:'boden',t:'Nach Overhead-Scan',s:`
 ~^PF|ISIS / STBY instrument|CHECK no flags
-~^PF|CLOCK|CHECK / SET
-^PF|A/SKID & N/W STRG|ON
+~PF|CLOCK|CHECK / SET
+PF|A/SKID & N/W STRG|ON
 ~^PF|ANN LT|TEST then BRT
 PF|THRUST LEVERS|IDLE|Hebel einmal ganz durchbewegen, dann IDLE
 PF|ENG MASTER 1 + 2|CHECK OFF
@@ -609,7 +624,6 @@ PF|ENG MODE selector|CHECK NORM
 PF|PARKING BRAKE|CHECK ON · ACCU / BRAKE PRESS CHECK
 ^PF|GRAVITY GEAR EXTN|CHECK stowed
 PF|ATC (Transponder)|STBY · ALT RPTG ON · SYS 1
-PF|Squawk|SET {squawk}|Sobald von Delivery bekommen
 PF|RMP|ON · Frequenzen SET|VHF1 ATC, VHF2 ATIS
 PF|MCDU INIT A|INIT REQUEST|SimBrief-Plan laden; FLT NBR {cs}, Cost Index, CRZ FL {crz}
 PF|MCDU F-PLN – DEPARTURE|RWY {depRwy} · SID {sid}|Am Abflugplatz-LSK → DEPARTURE → TMPY INSERT
@@ -637,9 +651,11 @@ PF|FCU ALT|SET initial cleared altitude
 ^PF|ECAM STS|CHECK
 ^PF|WX RADAR|CHECK OFF · PWS OFF
 ^PM|ADIRS|CHECK aligned, Position plausibel
-!boden:Clearance|ATC Clearance holen
+PM|ATIS {dep}|LISTEN · Information {atisDep}, QNH {qnhDep}|Vor dem Delivery-Anruf: ATIS-Buchstabe gehört zur Anfrage (Tab Wetter)
+!boden:Clearance|IFR-Clearance anfordern
 @PF|Request ATC clearance, please.
 PM|ATC CLEARANCE|OBTAIN|SID, Squawk, Höhe in MCDU/FCU übernehmen
+PF|Squawk|SET {squawk}|Aus der Clearance, am Transponder eintippen
 ^PM|MCDU F-PLN / FCU ALT|CHECK gegen Clearance`},
 
 {id:'brief',n:'Takeoff Briefing',f:'boden',t:'Cockpit fertig vorbereitet',s:`
@@ -665,7 +681,7 @@ PF|EFB Ground Services|Doors close, Stairs/GPU remove|[Fenix]
 #bs:down`},
 
 {id:'startclr',n:'At Start / Pushback Clearance',f:'boden',t:'Bereit zum Pushback',s:`
-!boden:Pushback|Startup- und Pushback-Freigabe holen
+!boden:Pushback|Startup und Pushback anfragen
 PM|PUSHBACK / START CLEARANCE|OBTAIN
 PM|ATC (Transponder)|SET for operation (AUTO)
 ^CM|WINDOWS / DOORS|CHECK CLOSED (ECAM DOOR)
@@ -707,7 +723,7 @@ PM|PITCH TRIM|SET {trim}
 #as:all`},
 
 {id:'taxi',n:'Taxi',f:'boden',t:'After Start Checklist complete',s:`
-!boden:Taxi|Taxi-Freigabe holen
+!boden:Taxi|Taxi anfragen
 PM|TAXI CLEARANCE|OBTAIN
 PF|NOSE light|TAXI
 PF|RWY TURN OFF lights|ON
@@ -742,7 +758,7 @@ PM|T.O MEMO|CHECK NO BLUE
 
 {id:'lineup',n:'Before Takeoff – Line Up',f:'boden',t:'Am Holding Point',s:`
 ^PM|BRAKE TEMP|CHECK (< 150 °C)|Brake Fans aus, wenn an
-!boden:Ready for departure|Line-up-Freigabe holen
+!boden:Ready for departure|Am Holding Point: Ground übergibt an Tower – „ready for departure“ melden
 PM|LINE-UP CLEARANCE|OBTAIN
 PF|STROBE|ON
 PF|LANDING LIGHTS|ON
@@ -788,6 +804,7 @@ PF|THRUST LEVERS|CL (Climb-Raste)
 PM|PACKS 1 + 2|ON (falls aus)`},
 
 {id:'atko',n:'After Takeoff',f:'abflug',t:'Acceleration Altitude',s:`
+!abflug:Erstanruf Departure|Nach dem Start: Tower übergibt an Departure – Erstanruf
 ^PM|TARGET SPEED|CHECK – beschleunigt auf Climb Speed
 @PF|THR CLB, CLB, NAV.|Acceleration Altitude: Speed-Target springt hoch
 @PM|Checked.
@@ -817,6 +834,7 @@ CM|BARO REF (EFIS + ISIS)|STD · CROSS CHECK
 #at:below`},
 
 {id:'climb10',n:'Climb – 10.000 ft',f:'abflug',t:'Durch FL100 im Steigflug',s:`
+!reise:Erstanruf Center|Im Steigflug: Departure übergibt an Center – Erstanruf
 @PF|Ten thousand feet checks.
 @PM|Ten thousand feet.
 PM|LANDING LIGHTS|OFF & RETRACT
@@ -832,6 +850,7 @@ PM|NAVAIDS|CLEAR manually tuned
 @PF|ALT CRZ.|beim Level-off auf Reiseflughöhe
 @PM|Checked.
 ^PM|TOC|Fuel und Zeit notieren
+!reise:Handoff erhalten|Bei jeder Übergabe: Frequenz zurücklesen, dann Erstanruf beim nächsten Center
 ^PF|ECAM MEMO + SD pages|REVIEW|ENG, BLEED, PRESS, ELEC, HYD, FUEL, COND, F/CTL
 ^PF|PRESSURIZATION|CHECK
 ^PF|FLIGHT PROGRESS|MONITOR · Fuel alle 30 min prüfen
@@ -839,8 +858,8 @@ PF|STEP CLIMB / WX RADAR|AS RQRD
 PF|TOP OF DESCENT|CHECK · ca. {tod} NM vor dem Ziel|Faustformel: (Reiseflughöhe − Platzhöhe) × 3 / 1000`},
 
 {id:'dprep',n:'Descent Preparation',f:'reise',t:'Ca. 15 min / 30 NM vor Top of Descent',s:`
-!reise:Sinkflug anfragen|Zuerst ATIS/Wetter Ziel holen (Tab Wetter)
-PM|WEATHER & LANDING INFO|OBTAIN · ATIS {atisArr}, QNH {qnhArr}, Piste {arrRwy}
+PM|WEATHER & LANDING INFO|OBTAIN · ATIS {atisArr}, QNH {qnhArr}, Piste {arrRwy}|Zuerst ATIS Ziel hören (Tab Wetter)
+!reise:Sinkflug anfragen|Sinkflug beim Center anfragen, falls ATC ihn nicht von selbst gibt
 CM|NAV CHARTS|PREPARE
 PM|LANDING PERFORMANCE|COMPUTE|[Fenix] EFB Arrival Perf
 CM|MCDU F-PLN – ARRIVAL|APPR {appType} {arrRwy} · STAR {star} · VIA / TRANS|Am Zielplatz-LSK → ARRIVAL → TMPY INSERT
@@ -872,6 +891,7 @@ PF|FCU ALT|PUSH – DES mode
 PM|SEAT BELTS|AS RQRD`},
 
 {id:'desc10',n:'Descent – 10.000 ft',f:'anflug',t:'Durch FL100 im Sinkflug',s:`
+!anflug:Erstanruf Approach|Im Sinkflug: Center übergibt an Approach – Erstanruf mit ATIS-Buchstabe
 @PF|Ten thousand feet checks.
 @PM|Ten thousand feet.
 PM|LANDING LIGHTS|ON
@@ -899,9 +919,12 @@ CM|APPROACH PHASE|CHECK / ACTIVATE|Im NAV automatisch bei DECEL, sonst 15 NM vor
 CM|LS pb|CHECK ON
 PM|AUTO BRK|CHECK SET
 PM|TCAS|TA or TA/RA
-^PM|CABIN CREW|„Cabin crew, take your seats for landing"`},
+^PM|CABIN CREW|„Cabin crew, take your seats for landing"
+!anflug:Cleared approach|Approach gibt Vectors und Anflugfreigabe – zurücklesen`},
 
 {id:'final',n:'Final Approach',f:'anflug',t:'Freigabe für den Anflug',s:`
+!anflug:Established|Established melden – Approach übergibt an Tower
+!landung:Erstanruf Tower|Tower rufen – Landefreigabe kommt meist bei 4–6 NM
 @PF|Flaps one.
 @PM|Speed checked, flaps one.
 PM|FLAPS|1 (Green Dot, ca. 3 NM vor dem Endanflug)
@@ -940,7 +963,6 @@ PM|LDG MEMO|CHECK NO BLUE
 ^CM|CABIN REPORT|RECEIVED
 @PF|Landing checklist.
 #ld:all
-!landung:Erstanruf Tower|Tower rufen / Landefreigabe
 @PM|One thousand.
 @PF|Stabilized.`},
 
@@ -991,6 +1013,7 @@ PM|NOSE / RWY TURN OFF|OFF
 #at:down`},
 
 {id:'alnd',n:'After Landing',f:'landung',t:'Piste verlassen',s:`
+!landung:Runway vacated|Piste frei: Tower übergibt an Ground – Ground rufen
 PF|GROUND SPOILERS|DISARM
 PF|LANDING LIGHTS|OFF & RETRACT
 PF|STROBE|AUTO
@@ -1007,7 +1030,7 @@ PM|ANTI ICE|AS RQRD
 ^PM|BRAKE TEMP|CHECK · Brake Fans nach 5 min AS RQRD
 @PF|After landing checklist.
 #al:all
-!landung:Taxi to stand|Taxi zum Stand
+!landung:Taxi to stand|Taxi zum Stand anfragen
 PF|TAXI|zum Stand {arrGate}`},
 
 {id:'park',n:'Parking',f:'landung',t:'Am Stand angekommen',s:`
@@ -1177,7 +1200,7 @@ function renderCheck(){
       else if(st.k==='clh')h+=`<div class="sec">${esc(st.n.toUpperCase())} CHECKLIST<small>${st.part==='down'?'bis zur Linie':st.part==='below'?'unter der Linie':''}</small></div>`;
       else if(st.k==='cl')h+=rowDo(st.c.toUpperCase(),fillG(st.v),key,'',st.sub);
       else if(st.k==='cle')h+=`<div class="call${who('PM').mine?' me':''}"><b>PM</b>„${esc(st.n)} checklist ${st.part==='down'?'down to the line':'complete'}.“</div>`;
-      else if(st.k==='funk')h+=`<button class="flink" data-gfunk="${esc(st.fp)}|${esc(st.rq)}">Funk · ${esc(st.label)} →</button>`;
+      else if(st.k==='funk')h+=atcLine(st.fp,st.rq,st.label);
     });
     if(['final','land'].includes(pg.id))h+=`<button class="flink" style="color:var(--r)" id="gGA">Go Around →</button>`;
   }
