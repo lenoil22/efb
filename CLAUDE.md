@@ -36,6 +36,7 @@ Sprache mit dem Nutzer: **Deutsch**. UI-Texte Deutsch, Funk-Phraseologie und Cal
   - `#ckid:down|below|all` – fügt Checkliste (Teil) ein
   - `!funkphase:Anfrage|Label` – Link in den Funk-Tab
   - `~` am Anfang = nur bei Detail „Voll“
+  - `^` (nach `~`) = nur Realismus: im Sim schon so (Cold & Dark) oder reine Kontrolle → grau (Einstellung: Grau/Normal/Ausblenden). Nie für Hebel/Schalter, die man an Hardware zurückstellen muss (Gear, Thrust, ENG MASTER/MODE, Parking Brake, Flaps, Speedbrake, Rudder Trim, FCU/EFIS), und nicht für T.O/LDG MEMO und 3 GREEN.
   - Platzhalter `{flex}`, `{ta}`, `{tl}`, `{tod}`, `{qnhArr}` … werden aus dem Flug gefüllt.
 - Quellen der Procedures: FlyByWire A32NX SOP, TheAirlinePilots „A320 Normal Procedures“ (Apr 2025), JayDee's Fenix Guide v1.31.1. Bei Änderungen gegen echte Airbus-SOP prüfen – **nichts auslassen**.
 

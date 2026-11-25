@@ -84,6 +84,9 @@ a{color:var(--c)}
 .r .v{color:var(--c);text-align:right;max-width:55%}
 .r.other .i{color:#a9b6c5}
 .r.x .i,.r.x .v{color:var(--mut);text-decoration:line-through}
+.r.rz .i,.r.rz .v{color:#4a5a6d}.r.rz .who{color:#3a4859}.r.rz .dots{border-bottom-color:#1f2a38}
+.r.rz+.note{color:#45535f}
+.rzleg{font-size:11px;color:var(--mut);margin:-8px 0 12px}.rzleg span{color:#4a5a6d;border-bottom:1px dotted #4a5a6d}
 .note{font-size:11px;color:var(--mut);margin:-3px 0 3px 32px;line-height:1.4}
 .call{font-size:15px;color:#b8c6d6;padding:7px 10px;margin:5px 0 5px 26px;border-left:3px solid #2c3a4c;background:#0f1722;border-radius:4px;line-height:1.4}.call b{display:inline-block;min-width:32px;font-size:11px;color:#6f8093;letter-spacing:.5px}.call.me{border-left-color:var(--c);color:#fff;font-weight:600}.call.me b{color:var(--c)}.call i{display:block;font-size:12px;color:#7d8da0;font-weight:400;font-style:normal;margin:2px 0 0 32px}
 .call b{font-style:normal;font-size:10px;color:var(--mut);font-weight:400;margin-right:6px}
@@ -515,23 +518,26 @@ const fill=s=>s.replace(/\{(\w+)\}/g,(_,k)=>F()[k]||'____');
                   #checkliste:teil        (down | below | all)
                   !funkphase:Anfrage|Beschriftung
                   ~ am Anfang = nur in Detailstufe „Voll"
+                  ^ (nach ~) = nur Realismus: im Sim schon so (Cold & Dark) oder reine Kontrolle → grau.
+                    Nie für Hebel/Schalter, die man an Hardware zurückstellen muss (Gear, Thrust, ENG MASTER/MODE,
+                    Parking Brake, Flaps, Speedbrake, Rudder Trim, FCU/EFIS) und nicht für T.O/LDG MEMO, 3 GREEN.
 */
 const FLOWS=[
 {id:'prelim',n:'Preliminary Cockpit Preparation',f:'boden',t:'Am Gate, Flugzeug kalt und dunkel',s:`
 PM|EFB|ON & SET|[Fenix] Settings prüfen, Sim Settings speichern
 PM|ENG MASTER 1 + 2|OFF
 PM|ENG MODE selector|NORM
-PM|WX RADAR|OFF
-PM|PRED W/S|OFF
+^PM|WX RADAR|OFF
+^PM|PRED W/S|OFF
 PM|LANDING GEAR lever|DOWN
-PM|WIPERS|BOTH OFF
-~PM|BAT 1 + 2 voltage|CHECK > 25.5 V|Mit BAT aus auf dem ELEC-Panel ablesen
+^PM|WIPERS|BOTH OFF
+~^PM|BAT 1 + 2 voltage|CHECK > 25.5 V|Mit BAT aus auf dem ELEC-Panel ablesen
 PM|BAT 1 + 2|ON / AUTO
 PM|EXT PWR|ON|Wenn AVAIL leuchtet
 PM|NAV & LOGO lights|ON
 PM|RMP|ON · Frequenzen SET|Green NAV- und SEL-Licht aus
-~PM|APU FIRE pb|IN & GUARDED · AGENT lights OFF
-~PM|APU FIRE TEST|PRESS (max. 3 s)|Erwartet: APU FIRE Warning, Master Warning, Chime
+~^PM|APU FIRE pb|IN & GUARDED · AGENT lights OFF
+~^PM|APU FIRE TEST|PRESS (max. 3 s)|Erwartet: APU FIRE Warning, Master Warning, Chime
 PM|APU MASTER|ON
 PM|APU START|ON|Mind. 3 s nach APU MASTER
 PM|APU AVAIL|CHECK|Auf ECAM warten, bis AVAIL kommt
@@ -539,82 +545,82 @@ PM|EXT PWR|OFF|Optional – APU versorgt jetzt
 PM|APU BLEED|ON
 PM|ADIRS 1 + 2 + 3|NAV|Alignment läuft (ca. 7–10 min)
 PM|COCKPIT LIGHTS|AS RQRD
-~CM1|ECAM RCL pb|PRESS 3 s|Gespeicherte Warnungen ansehen
-~PM|ECAM ENG page|CHECK OIL QTY
-~PM|ECAM HYD page|CHECK reservoir levels
-~PM|ECAM DOOR page|CHECK OXY pressure
+~^CM1|ECAM RCL pb|PRESS 3 s|Gespeicherte Warnungen ansehen
+~^PM|ECAM ENG page|CHECK OIL QTY
+~^PM|ECAM HYD page|CHECK reservoir levels
+~^PM|ECAM DOOR page|CHECK OXY pressure
 PM|FLAPS lever|CHECK position = ECAM
 PM|SPEED BRAKE lever|RETRACTED & DISARMED
-PM|ACCU PRESS|CHECK green band
+^PM|ACCU PRESS|CHECK green band
 PM|PARKING BRAKE|ON · BRAKE PRESS CHECK
-~PM|EMERGENCY EQUIPMENT|CHECK on board
-~PM|CIRCUIT BREAKERS|CHECK (overhead + rear)
-PM|GEAR PINS & COVERS|CHECK on board & stowed
+~^PM|EMERGENCY EQUIPMENT|CHECK on board
+~^PM|CIRCUIT BREAKERS|CHECK (overhead + rear)
+^PM|GEAR PINS & COVERS|CHECK on board & stowed
 PM|EFB – Ground Services|AS DESIRED|[Fenix] Boarding, Catering, Fuel
 PM|EFB – Mass & Balance|LOAD AIRCRAFT|[Fenix] Ggf. vorher SimBrief importieren`},
 
 {id:'walk',n:'Exterior Walkaround',f:'boden',t:'Optional – im Sim meist übersprungen',opt:1,s:`
-~PM|Linker Bug|AOA probes, static ports, Oxygen-Discharge grün
-~PM|Nase|Pitot, TAT probes, Radom, Avionik-Türen zu
-~PM|Bugfahrwerk|Chocks, Reifen, Lichter, Safety pin entfernt
-~PM|Rechter Bug|Static ports, AOA, Cargo door
-~PM|Rumpf Mitte unten|Antennen, Ram Air Inlet, Pack Intakes frei
-~PM|Rechter Flügel + Triebwerk 2|Fan Cowls zu, Fan Blades, Slats, Tankentlüftung, Nav light
-~PM|Rechtes Hauptfahrwerk|Reifen, Bremsverschleiß, Pins entfernt, keine Lecks
-~PM|Heck + APU|Leitwerk, Static discharger, APU-Türen zu, Exhaust frei
-~PM|Linkes Hauptfahrwerk + Flügel + Triebwerk 1|wie rechts`},
+~^PM|Linker Bug|AOA probes, static ports, Oxygen-Discharge grün
+~^PM|Nase|Pitot, TAT probes, Radom, Avionik-Türen zu
+~^PM|Bugfahrwerk|Chocks, Reifen, Lichter, Safety pin entfernt
+~^PM|Rechter Bug|Static ports, AOA, Cargo door
+~^PM|Rumpf Mitte unten|Antennen, Ram Air Inlet, Pack Intakes frei
+~^PM|Rechter Flügel + Triebwerk 2|Fan Cowls zu, Fan Blades, Slats, Tankentlüftung, Nav light
+~^PM|Rechtes Hauptfahrwerk|Reifen, Bremsverschleiß, Pins entfernt, keine Lecks
+~^PM|Heck + APU|Leitwerk, Static discharger, APU-Türen zu, Exhaust frei
+~^PM|Linkes Hauptfahrwerk + Flügel + Triebwerk 1|wie rechts`},
 
 {id:'ovhd',n:'Cockpit Preparation – Overhead',f:'boden',t:'Nach Preliminary Prep, Overhead-Scan von links oben nach rechts unten',s:`
-PF|ALL WHITE LIGHTS|OFF|Beim Scan alle weißen Lichter ausschalten
-~PF|RCDR GND CTL|ON
-~PF|CVR TEST|PRESS & HOLD|Testton hören
-~PF|EVAC CAPT & PURS/CAPT|AS RQRD
-PF|ADIRS 1 + 2 + 3|CHECK NAV
+^PF|ALL WHITE LIGHTS|OFF|Beim Scan alle weißen Lichter ausschalten
+~^PF|RCDR GND CTL|ON
+~^PF|CVR TEST|PRESS & HOLD|Testton hören
+~^PF|EVAC CAPT & PURS/CAPT|AS RQRD
+^PF|ADIRS 1 + 2 + 3|CHECK NAV
 PF|STROBE|AUTO
-PF|BEACON|OFF
-PF|NAV & LOGO|ON
+^PF|BEACON|OFF
+^PF|NAV & LOGO|ON
 PF|SEAT BELTS|ON
 PF|NO SMOKING|AUTO
 PF|EMER EXIT LT|ARM
-PF|PROBE / WINDOW HEAT|AUTO
-PF|LDG ELEV|AUTO
-PF|PACK FLOW|AS RQRD (NORM)
-PF|X BLEED|AUTO
-PF|APU BLEED|CHECK ON
-PF|AIR COND panel|CHECK no white lights
-~PF|BAT 1 + 2|OFF then ON|Nach 10 s Ladestrom < 60 A und fallend (ECAM ELEC)
-PF|ELEC panel|CHECK no amber except GEN FAULT
+^PF|PROBE / WINDOW HEAT|AUTO
+^PF|LDG ELEV|AUTO
+^PF|PACK FLOW|AS RQRD (NORM)
+^PF|X BLEED|AUTO
+^PF|APU BLEED|CHECK ON
+^PF|AIR COND panel|CHECK no white lights
+~^PF|BAT 1 + 2|OFF then ON|Nach 10 s Ladestrom < 60 A und fallend (ECAM ELEC)
+^PF|ELEC panel|CHECK no amber except GEN FAULT
 PF|FUEL PUMPS|ON (all)
-PF|FUEL MODE SEL|AUTO
-~PF|ENG 1 + 2 FIRE pb|IN & GUARDED · AGENT lights OFF
-~PF|ENG 1 + 2 FIRE TEST|PRESS|Fire Warning, Chime, ENG FIRE-Lichter
+^PF|FUEL MODE SEL|AUTO
+~^PF|ENG 1 + 2 FIRE pb|IN & GUARDED · AGENT lights OFF
+~^PF|ENG 1 + 2 FIRE TEST|PRESS|Fire Warning, Chime, ENG FIRE-Lichter
 PF|OXYGEN CREW SUPPLY|ON
-~PF|AUDIO SWITCHING|NORM
-~PF|MAINT / VENT panel|CHECK all lights off`},
+~^PF|AUDIO SWITCHING|NORM
+~^PF|MAINT / VENT panel|CHECK all lights off`},
 
 {id:'ped',n:'Cockpit Preparation – Pedestal & MCDU',f:'boden',t:'Nach Overhead-Scan',s:`
-~PF|ISIS / STBY instrument|CHECK no flags
-~PF|CLOCK|CHECK / SET
-PF|A/SKID & N/W STRG|ON
-~PF|ANN LT|TEST then BRT
+~^PF|ISIS / STBY instrument|CHECK no flags
+~^PF|CLOCK|CHECK / SET
+^PF|A/SKID & N/W STRG|ON
+~^PF|ANN LT|TEST then BRT
 PF|THRUST LEVERS|IDLE|Hebel einmal ganz durchbewegen, dann IDLE
 PF|ENG MASTER 1 + 2|CHECK OFF
 PF|ENG MODE selector|CHECK NORM
 PF|PARKING BRAKE|CHECK ON · ACCU / BRAKE PRESS CHECK
-PF|GRAVITY GEAR EXTN|CHECK stowed
+^PF|GRAVITY GEAR EXTN|CHECK stowed
 PF|ATC (Transponder)|STBY · ALT RPTG ON · SYS 1
 PF|Squawk|SET {squawk}|Sobald von Delivery bekommen
 PF|RMP|ON · Frequenzen SET|VHF1 ATC, VHF2 ATIS
 PF|MCDU INIT A|INIT REQUEST|SimBrief-Plan laden; FLT NBR {cs}, Cost Index, CRZ FL {crz}
 PF|MCDU F-PLN – DEPARTURE|RWY {depRwy} · SID {sid}|Am Abflugplatz-LSK → DEPARTURE → TMPY INSERT
 PF|MCDU F-PLN|CHECK route, DISCONTINUITIES löschen|Mit CLR
-~PF|MCDU F-PLN|CHECK DIST TO DEST vs. Flugplan
-~PF|MCDU RAD NAV|CHECK
+~^PF|MCDU F-PLN|CHECK DIST TO DEST vs. Flugplan
+~^PF|MCDU RAD NAV|CHECK
 PF|MCDU INIT B / Fuel|ZFW, ZFWCG, BLOCK {fuel}|[Fenix] Werte aus EFB Mass & Balance; oder FUEL PLANNING
 PF|EFB Departure Perf|CALCULATE|[Fenix] Airport, Runway, Wetter, Loadsheet-Sync
 PF|MCDU PERF TAKEOFF|V1 / VR / V2 {vspeeds}|Dazu FLAPS/THS {flaps}, FLEX TEMP
 PF|MCDU PERF TAKEOFF|THR RED / ACC · TRANS ALT {ta}|Üblich: THR RED 1000 ft, ACC 1000–3000 ft AAL
-~PF|MCDU SEC F-PLN|AS RQRD`},
+~^PF|MCDU SEC F-PLN|AS RQRD`},
 
 {id:'glare',n:'Cockpit Preparation – Glareshield & Final',f:'boden',t:'MCDU fertig',s:`
 CM|BARO REF (EFIS + ISIS)|SET QNH {qnhDep}|Unterschied PFD Captain/FO max. 20 ft
@@ -623,18 +629,18 @@ CM|LS / ND MODE & RANGE|AS RQRD
 PF|FCU SPD|CHECK DASHED
 PF|FCU HDG|CHECK DASHED · HDG V/S
 PF|FCU ALT|SET initial cleared altitude
-~CM|OXYGEN MASK TEST|PERFORM|Crew supply ON, Test-Knopf drücken, Blinker gelb→schwarz
-~CM|PFD / ND brightness|AS RQRD
-~CM|LOUDSPEAKER|SET (ca. 1 Uhr)
-PF|PFD / ND|CHECK display & data
-PF|ECAM PRESS page|CHECK LDG ELEV AUTO
-PF|ECAM STS|CHECK
-PF|WX RADAR|CHECK OFF · PWS OFF
-PM|ADIRS|CHECK aligned, Position plausibel
+~^CM|OXYGEN MASK TEST|PERFORM|Crew supply ON, Test-Knopf drücken, Blinker gelb→schwarz
+~^CM|PFD / ND brightness|AS RQRD
+~^CM|LOUDSPEAKER|SET (ca. 1 Uhr)
+^PF|PFD / ND|CHECK display & data
+^PF|ECAM PRESS page|CHECK LDG ELEV AUTO
+^PF|ECAM STS|CHECK
+^PF|WX RADAR|CHECK OFF · PWS OFF
+^PM|ADIRS|CHECK aligned, Position plausibel
 !boden:Clearance|ATC Clearance holen
 @PF|Request ATC clearance, please.
 PM|ATC CLEARANCE|OBTAIN|SID, Squawk, Höhe in MCDU/FCU übernehmen
-PM|MCDU F-PLN / FCU ALT|CHECK gegen Clearance`},
+^PM|MCDU F-PLN / FCU ALT|CHECK gegen Clearance`},
 
 {id:'brief',n:'Takeoff Briefing',f:'boden',t:'Cockpit fertig vorbereitet',s:`
 @PF|Takeoff briefing.
@@ -649,12 +655,12 @@ PF|Engine Failure after V1|Keine Aktion unter 400 ft außer Gear up; EO-Prozedur
 
 {id:'bpush',n:'Before Pushback or Start',f:'boden',t:'Boarding fertig, Türen gleich zu',s:`
 PF|EFB Ground Services|Doors close, Stairs/GPU remove|[Fenix]
-CM|SEATING POSITION|ADJUST
-CM|FINAL LOADSHEET|CHECK · ZFW / ZFWCG gegen MCDU
-CM|FUEL ON BOARD|CHECK {fuel} (ECAM vs. Plan)
-PF|FMS TAKEOFF DATA|CROSS CHECK
-PF|MCDU|PF: PERF TO page · PM: F-PLN page
-PM|EXT PWR|CHECK OFF / disconnected
+^CM|SEATING POSITION|ADJUST
+^CM|FINAL LOADSHEET|CHECK · ZFW / ZFWCG gegen MCDU
+^CM|FUEL ON BOARD|CHECK {fuel} (ECAM vs. Plan)
+^PF|FMS TAKEOFF DATA|CROSS CHECK
+^PF|MCDU|PF: PERF TO page · PM: F-PLN page
+^PM|EXT PWR|CHECK OFF / disconnected
 @PF|Before start checklist, down to the line.
 #bs:down`},
 
@@ -662,12 +668,12 @@ PM|EXT PWR|CHECK OFF / disconnected
 !boden:Pushback|Startup- und Pushback-Freigabe holen
 PM|PUSHBACK / START CLEARANCE|OBTAIN
 PM|ATC (Transponder)|SET for operation (AUTO)
-CM|WINDOWS / DOORS|CHECK CLOSED (ECAM DOOR)
-CM|SLIDES|CHECK ARMED
+^CM|WINDOWS / DOORS|CHECK CLOSED (ECAM DOOR)
+^CM|SLIDES|CHECK ARMED
 PF|BEACON|ON
 PF|THRUST LEVERS|CHECK IDLE
-PF|ACCU PRESS|CHECK green
-PF|ECAM|CHECK NW STRG DISC memo|Bei Pushback
+^PF|ACCU PRESS|CHECK green
+^PF|ECAM|CHECK NW STRG DISC memo|Bei Pushback
 @PF|Below the line.
 #bs:below
 PF|PARKING BRAKE|RELEASE for pushback|[Fenix] EFB → Ground Services → Pushback
@@ -677,12 +683,12 @@ PF|PARKING BRAKE|SET when pushback complete · BRAKE PRESS CHECK`},
 PF|ENG MODE selector|IGN / START
 @PF|Starting engine two.
 PF|ENG MASTER 2|ON
-PF|ENG 2 start|MONITOR|N2 steigt · ~16 % Zündung · ~22 % Fuel Flow · EGT innerhalb 15 s · ~50 % Startventil zu
-PF|ENG 2 idle parameters|CHECK|N1 ≈ 19–20 %, N2 ≈ 60–68 %, EGT ≈ 400–520 °C, FF ≈ 280–300 kg/h
+^PF|ENG 2 start|MONITOR|N2 steigt · ~16 % Zündung · ~22 % Fuel Flow · EGT innerhalb 15 s · ~50 % Startventil zu
+^PF|ENG 2 idle parameters|CHECK|N1 ≈ 19–20 %, N2 ≈ 60–68 %, EGT ≈ 400–520 °C, FF ≈ 280–300 kg/h
 @PF|Starting engine one.
 PF|ENG MASTER 1|ON
-PF|ENG 1 start|MONITOR|wie Triebwerk 2
-PF|ENG 1 idle parameters|CHECK|N1 ≈ 19–20 %, N2 ≈ 60–68 %, EGT ≈ 400–520 °C`},
+^PF|ENG 1 start|MONITOR|wie Triebwerk 2
+^PF|ENG 1 idle parameters|CHECK|N1 ≈ 19–20 %, N2 ≈ 60–68 %, EGT ≈ 400–520 °C`},
 
 {id:'after',n:'After Start',f:'boden',t:'Beide Triebwerke stabil im Idle',s:`
 PF|ENG MODE selector|NORM
@@ -694,8 +700,8 @@ PM|GROUND SPOILERS|ARM
 PM|RUDDER TRIM|CHECK ZERO
 PM|FLAPS|SET {flaps} for takeoff
 PM|PITCH TRIM|SET {trim}
-PF|ECAM|CHECK no STATUS reminder
-PF|NW STRG DISC memo|CHECK not displayed
+^PF|ECAM|CHECK no STATUS reminder
+^PF|NW STRG DISC memo|CHECK not displayed
 @PF|Clear to disconnect.
 @PF|After start checklist.
 #as:all`},
@@ -708,7 +714,7 @@ PF|RWY TURN OFF lights|ON
 @PF|Clear left side.
 @PM|Clear right side.
 PF|PARKING BRAKE|RELEASE
-PM|BRAKE PRESS|CHECK ZERO
+^PM|BRAKE PRESS|CHECK ZERO
 PF|THRUST|Leicht nach vorn, max. ca. 40 % N1|Taxi 20–30 kt geradeaus, ca. 10 kt in Kurven
 @PF|Brake check.
 @PM|Pressure zero.
@@ -720,32 +726,32 @@ PF|SIDESTICK|FULL LEFT · FULL RIGHT · NEUTRAL
 @PF|Rudder.
 PF|RUDDER|FULL LEFT · FULL RIGHT · NEUTRAL
 @PM|Full left … full right … neutral.
-PM|ATC CLEARANCE|CONFIRM · SID {sid} in F-PLN prüfen
+^PM|ATC CLEARANCE|CONFIRM · SID {sid} in F-PLN prüfen
 PM|FCU ALT|CHECK cleared altitude
 PM|BOTH FD|CHECK ON
 CM|TAKEOFF BRIEFING|CONFIRM
 PM|WX RADAR|ON · PWS AUTO
-PM|ATC code|CHECK {squawk}
+^PM|ATC code|CHECK {squawk}
 CM|TERR ON ND|AS RQRD|Wetterradar PF-Seite, Terrain PM-Seite
 PM|AUTO BRK|MAX
 PM|T.O CONFIG|TEST · T.O CONFIG NORMAL
 PM|T.O MEMO|CHECK NO BLUE
-CM|CABIN REPORT|RECEIVED (Cabin ready)
+^CM|CABIN REPORT|RECEIVED (Cabin ready)
 @PF|Before takeoff checklist, down to the line.
 #bt:down`},
 
 {id:'lineup',n:'Before Takeoff – Line Up',f:'boden',t:'Am Holding Point',s:`
-PM|BRAKE TEMP|CHECK (< 150 °C)|Brake Fans aus, wenn an
+^PM|BRAKE TEMP|CHECK (< 150 °C)|Brake Fans aus, wenn an
 !boden:Ready for departure|Line-up-Freigabe holen
 PM|LINE-UP CLEARANCE|OBTAIN
 PF|STROBE|ON
 PF|LANDING LIGHTS|ON
 PF|NOSE light|T.O
 PM|TCAS|TA or TA/RA
-CM|APPROACH PATH|CLEAR OF TRAFFIC
+^CM|APPROACH PATH|CLEAR OF TRAFFIC
 @PM|Approach path clear.
-PM|CABIN CREW|ADVISE
-CM|TAKEOFF RUNWAY|CONFIRM {depRwy}
+^PM|CABIN CREW|ADVISE
+^CM|TAKEOFF RUNWAY|CONFIRM {depRwy}
 PM|PACKS 1 + 2|AS RQRD
 PM|ENG MODE selector|AS RQRD (IGN bei Starkregen/Wasser)
 @PF|Below the line.
@@ -758,9 +764,9 @@ PF|THRUST LEVERS|50 % N1, stabilisieren
 PF|SIDESTICK|Halb nach vorn (Seitenwind > 20 kt oder Rückenwind: voll) bis 80 kt, neutral bei 100 kt
 PF|BRAKES|RELEASE
 PF|THRUST LEVERS|FLX or TOGA
-PM|CHRONO|START
+^PM|CHRONO|START
 @PF|MAN FLEX {flex}, SRS, runway, A/THR blue.
-PM|TAKEOFF N1|CHECK bis 80 kt
+^PM|TAKEOFF N1|CHECK bis 80 kt
 @PM|Checked. Thrust set.
 @PM|One hundred knots.
 @PF|Checked.
@@ -782,7 +788,7 @@ PF|THRUST LEVERS|CL (Climb-Raste)
 PM|PACKS 1 + 2|ON (falls aus)`},
 
 {id:'atko',n:'After Takeoff',f:'abflug',t:'Acceleration Altitude',s:`
-PM|TARGET SPEED|CHECK – beschleunigt auf Climb Speed
+^PM|TARGET SPEED|CHECK – beschleunigt auf Climb Speed
 @PF|THR CLB, CLB, NAV.|Acceleration Altitude: Speed-Target springt hoch
 @PM|Checked.
 @PF|Flaps one.
@@ -806,7 +812,7 @@ PM|ANTI ICE|AS RQRD
 CM|BARO REF (EFIS + ISIS)|STD · CROSS CHECK
 @PM|Standard set, passing flight level …
 @PF|Checked.
-PF|CRZ FL|CHECK {crz}
+^PF|CRZ FL|CHECK {crz}
 @PF|Below the line.
 #at:below`},
 
@@ -817,18 +823,18 @@ PM|LANDING LIGHTS|OFF & RETRACT
 PM|SEAT BELTS|AS RQRD
 CM|EFIS|ARPT / CSTR AS RQRD
 PM|TERR ON ND|OFF
-PM|ECAM MEMO|REVIEW
+^PM|ECAM MEMO|REVIEW
 PM|NAVAIDS|CLEAR manually tuned
-~PM|SEC F-PLN|COPY ACTIVE
-PM|OPT / MAX ALT|CHECK`},
+~^PM|SEC F-PLN|COPY ACTIVE
+^PM|OPT / MAX ALT|CHECK`},
 
 {id:'cruise',n:'Cruise',f:'reise',t:'Reiseflughöhe {crz} erreicht',s:`
 @PF|ALT CRZ.|beim Level-off auf Reiseflughöhe
 @PM|Checked.
-PM|TOC|Fuel und Zeit notieren
-PF|ECAM MEMO + SD pages|REVIEW|ENG, BLEED, PRESS, ELEC, HYD, FUEL, COND, F/CTL
-PF|PRESSURIZATION|CHECK
-PF|FLIGHT PROGRESS|MONITOR · Fuel alle 30 min prüfen
+^PM|TOC|Fuel und Zeit notieren
+^PF|ECAM MEMO + SD pages|REVIEW|ENG, BLEED, PRESS, ELEC, HYD, FUEL, COND, F/CTL
+^PF|PRESSURIZATION|CHECK
+^PF|FLIGHT PROGRESS|MONITOR · Fuel alle 30 min prüfen
 PF|STEP CLIMB / WX RADAR|AS RQRD
 PF|TOP OF DESCENT|CHECK · ca. {tod} NM vor dem Ziel|Faustformel: (Reiseflughöhe − Platzhöhe) × 3 / 1000`},
 
@@ -839,12 +845,12 @@ CM|NAV CHARTS|PREPARE
 PM|LANDING PERFORMANCE|COMPUTE|[Fenix] EFB Arrival Perf
 CM|MCDU F-PLN – ARRIVAL|APPR {appType} {arrRwy} · STAR {star} · VIA / TRANS|Am Zielplatz-LSK → ARRIVAL → TMPY INSERT
 CM|MCDU F-PLN|CHECK Anflug + Missed Approach, Discontinuities
-~CM|MCDU DES WIND|CHECK
-CM|MCDU PERF DES|CHECK Speed (250 kt unter FL100)
+~^CM|MCDU DES WIND|CHECK
+^CM|MCDU PERF DES|CHECK Speed (250 kt unter FL100)
 CM|MCDU PERF APPR|QNH {qnhArr}, TEMP, WIND, MINIMUM {mins}, LDG CONF
-~CM|MCDU PERF GO AROUND|CHECK THR RED / ACC
-CM|MCDU RAD NAV|CHECK / identify navaids
-PF|ECAM|CHECK LDG ELEV AUTO · STATUS
+~^CM|MCDU PERF GO AROUND|CHECK THR RED / ACC
+^CM|MCDU RAD NAV|CHECK / identify navaids
+^PF|ECAM|CHECK LDG ELEV AUTO · STATUS
 PF|AUTO BRK|LO / MED
 @PF|Approach briefing.
 PF|APPROACH BRIEFING|PERFORM|Wetter, STAR, Anflug, Minimums {mins}, Go-around, Taxi zum Stand
@@ -861,8 +867,8 @@ PF|FCU ALT|SET cleared altitude
 PF|FCU ALT|PUSH – DES mode
 @PF|THR IDLE, DES, NAV.
 @PM|Checked.
-PF|DESCENT|MONITOR · VDEV / PROG|Speedbrakes nur bei Bedarf
-PM|ECAM STATUS|CHECK
+^PF|DESCENT|MONITOR · VDEV / PROG|Speedbrakes nur bei Bedarf
+^PM|ECAM STATUS|CHECK
 PM|SEAT BELTS|AS RQRD`},
 
 {id:'desc10',n:'Descent – 10.000 ft',f:'anflug',t:'Durch FL100 im Sinkflug',s:`
@@ -873,8 +879,8 @@ PM|NOSE light|T.O
 PM|SEAT BELTS|ON
 CM|EFIS|CSTR
 CM|LS pb|ON for ILS
-PM|NAVAIDS|SELECTED / IDENTIFIED
-PF|NAV ACCURACY|CHECK
+^PM|NAVAIDS|SELECTED / IDENTIFIED
+^PF|NAV ACCURACY|CHECK
 PM|TERR ON ND|AS RQRD`},
 
 {id:'tl',n:'Transition Level',f:'anflug',t:'Beim Durchsinken des Transition Level ({tl}), nach Freigabe auf QNH',s:`
@@ -889,11 +895,11 @@ CM|BARO REF (EFIS + ISIS)|QNH {qnhArr} · CROSS CHECK
 CM|APPROACH PHASE|CHECK / ACTIVATE|Im NAV automatisch bei DECEL, sonst 15 NM vorher aktivieren
 @PF|Approach phase activated.
 @PM|Checked.
-PF|MANAGED SPEED|CHECK
+^PF|MANAGED SPEED|CHECK
 CM|LS pb|CHECK ON
 PM|AUTO BRK|CHECK SET
 PM|TCAS|TA or TA/RA
-PM|CABIN CREW|„Cabin crew, take your seats for landing"`},
+^PM|CABIN CREW|„Cabin crew, take your seats for landing"`},
 
 {id:'final',n:'Final Approach',f:'anflug',t:'Freigabe für den Anflug',s:`
 @PF|Flaps one.
@@ -928,10 +934,10 @@ PM|ECAM WHEEL page|CHECK · 3 GREEN
 @PF|Flaps full.
 @PM|Speed checked, flaps full.
 PM|FLAPS|FULL
-PM|A/THR|CHECK SPEED mode or OFF
+^PM|A/THR|CHECK SPEED mode or OFF
 PM|WING ANTI ICE|OFF
 PM|LDG MEMO|CHECK NO BLUE
-CM|CABIN REPORT|RECEIVED
+^CM|CABIN REPORT|RECEIVED
 @PF|Landing checklist.
 #ld:all
 !landung:Erstanruf Tower|Tower rufen / Landefreigabe
@@ -939,7 +945,7 @@ CM|CABIN REPORT|RECEIVED
 @PF|Stabilized.`},
 
 {id:'land',n:'Landing',f:'landung',t:'Kurz vor der Schwelle',s:`
-PF|LAND mode (Autoland)|CHECK at 350 ft RA|Nur bei Autoland
+^PF|LAND mode (Autoland)|CHECK at 350 ft RA|Nur bei Autoland
 @PM|One hundred above.
 @PM|Minimum.
 @PF|Continue.
@@ -998,29 +1004,29 @@ PM|TCAS|STBY
 PM|TERR ON ND|OFF
 PM|APU|START
 PM|ANTI ICE|AS RQRD
-PM|BRAKE TEMP|CHECK · Brake Fans nach 5 min AS RQRD
+^PM|BRAKE TEMP|CHECK · Brake Fans nach 5 min AS RQRD
 @PF|After landing checklist.
 #al:all
 !landung:Taxi to stand|Taxi zum Stand
 PF|TAXI|zum Stand {arrGate}`},
 
 {id:'park',n:'Parking',f:'landung',t:'Am Stand angekommen',s:`
-PF|ACCU PRESS|CHECK green
+^PF|ACCU PRESS|CHECK green
 PF|PARKING BRAKE|ON · BRAKE PRESS CHECK
 PM|ANTI ICE|OFF
 PM|APU BLEED|ON
 PM|EXT PWR|ON (nur wenn APU nicht verfügbar)
 PF|ENG MASTER 1 + 2|OFF|Mind. 3 min nach hohem Schub
-PF|SLIDES|CHECK DISARMED
+^PF|SLIDES|CHECK DISARMED
 PF|SEAT BELTS|OFF
 PF|BEACON|OFF (Triebwerke ausgelaufen)
 PF|EXTERIOR LIGHTS|AS RQRD
 PF|GROUND CONTACT|ESTABLISH · Chocks|[Fenix] EFB Ground Services: Chocks, GPU, Stairs
 PM|FUEL PUMPS|OFF
 PM|ATC (Transponder)|STBY
-~PM|IRS performance|CHECK (POSITION MONITOR)
-~PM|FUEL QUANTITY|CHECK
-~PM|STS|PRESS · CHECK
+~^PM|IRS performance|CHECK (POSITION MONITOR)
+~^PM|FUEL QUANTITY|CHECK
+~^PM|STS|PRESS · CHECK
 PM|BRAKE FANS|OFF
 PF|PARKING BRAKE|AS RQRD (aus, wenn Chocks drin)
 @PF|Parking checklist.
@@ -1042,7 +1048,7 @@ PM|BAT 1 + 2|OFF
 ];
 
 /* ---------- Einstellungen ---------- */
-S.set={seat:'CA',role:'PF',mode:'guided',detail:'voll',other:true,tts:false,wake:true,clrRwy:false,...(S.set||{})};
+S.set={seat:'CA',role:'PF',mode:'guided',detail:'voll',other:true,tts:false,wake:true,clrRwy:false,rz:'dim',...(S.set||{})};
 S.g={p:0,i:0,done:{},...(S.g||{})};
 const SETS=[
  ['seat','Sitz',[['CA','Captain (links)'],['FO','First Officer (rechts)']]],
@@ -1050,6 +1056,7 @@ const SETS=[
  ['mode','Checklisten-Tab',[['list','Nur Normal Checklist'],['guided','Mit Leitfaden (Procedures + Checklist)']]],
  ['detail','Detail',[['voll','Voll – alles'],['kurz','Kurz – ohne Tests und Nebenpunkte']]],
  ['other','Schritte der anderen Seite im Leitfaden',[[true,'Anzeigen'],[false,'Ausblenden']]],
+ ['rz','Nur-Realismus-Schritte im Leitfaden (im Sim schon so oder nur Kontrolle)',[['dim','Grau'],['normal','Normal'],['hide','Ausblenden']]],
  ['wake','Bildschirm an lassen',[[true,'An'],[false,'Aus']]],
 ];
 /* ---------- Bildschirm an (Screen Wake Lock) ----------
@@ -1090,6 +1097,7 @@ function steps(ph){
     line=line.trim();if(!line)return;let x=false;
     if(line[0]==='~'){x=true;line=line.slice(1)}
     if(x&&S.set.detail==='kurz')return;
+    let rz=false;if(line[0]==='^'){rz=true;line=line.slice(1);if(S.set.rz==='hide')return}
     if(line[0]==='@'){const p=line.slice(1).split('|');out.push({k:'call',r:p[0],t:p[1],n:p[2]||''});return}
     if(line[0]==='#'){const[id,part]=line.slice(1).split(':');const c=CKMAP[id];if(!c)return;
       const li=c.it.indexOf('LINE');let items=c.it.map((it,i)=>[it,i]).filter(([it])=>it!=='LINE');
@@ -1100,7 +1108,7 @@ function steps(ph){
       out.push({k:'cle',n:c.n,part});return}
     if(line[0]==='!'){const[a,label]=line.slice(1).split('|');const[fp,rq]=a.split(':');out.push({k:'funk',fp,rq,label});return}
     const[r,i,s,n]=line.split('|');
-    const st={k:'do',r,i,s:s||'',n:n||''};
+    const st={k:'do',r,i,s:s||'',n:n||'',rz:rz&&S.set.rz!=='normal'};
     if(!S.set.other&&!who(r).mine)return;
     out.push(st);
   });
@@ -1151,18 +1159,20 @@ function posAhead(){
   const P=pages(),i=S.g[pkey()]||0,j=P.findIndex(x=>x.id===id);
   return j>i?{j,id,t:(POS.p.groundspeed<40?'':altTxt(POS.p.altitude)+', ')+g[1]}:null;
 }
-function rowDo(i,v,key,who,note,other){return`<div class="r ${S.x[key]?'x':''} ${other?'other':''}" data-x="${key}"><span class="who">${esc(who||'')}</span><span class="i">${esc(i)}</span><span class="dots"></span><span class="v">${esc(v)}</span></div>${note?`<div class="note">${esc(note)}</div>`:''}`}
+function rowDo(i,v,key,who,note,other,rz){return`<div class="r ${S.x[key]?'x':''} ${other?'other':''} ${rz?'rz':''}" data-x="${key}"><span class="who">${esc(who||'')}</span><span class="i">${esc(i)}</span><span class="dots"></span><span class="v">${esc(v)}</span></div>${note?`<div class="note">${esc(note)}</div>`:''}`}
 function renderCheck(){
   const P=pages(),k=pkey();let i=S.g[k]||0;if(i>=P.length)i=0;S.g[k]=i;const pg=P[i];
   const ni=P.findIndex((x,j)=>j>i&&!x.opt);
   let h=`<div class="pghead"><p class="lbl">${S.set.mode==='guided'?'Phase':'Checkliste'} ${i+1} / ${P.length}</p><select id="pgSel" aria-label="Phase wählen">${P.map((x,j)=>`<option value="${j}" ${j===i?'selected':''}>${j+1}. ${esc(x.n)}</option>`).join('')}</select></div><h2>${esc(pg.n)}</h2>`;
   h+=pg.t?`<p class="when">Wann: ${esc(fillG(pg.t))}</p>`:'<div style="height:12px"></div>';
+  const SS=pg.p?steps(pg.p):[];
+  if(SS.some(st=>st.rz))h+=`<p class="rzleg"><span>Grau</span> = im Sim schon so eingestellt oder nur Kontrolle. Für den Realismus, kann man überspringen.</p>`;
   if(pg.c){
     pg.c.it.forEach((x,j)=>{if(x==='LINE'){h+='<div class="line">below the line</div>';return}h+=rowDo(x[0].toUpperCase(),fillG(x[1]),pg.id+':'+j,'',x[2]||'')});
     if(pg.c.note)h+=`<p class="msg">${esc(pg.c.note)}</p>`;
   }else{
-    steps(pg.p).forEach((st,j)=>{const key=pg.id+':'+j;
-      if(st.k==='do'){const w=who(st.r);h+=rowDo(fillG(st.i),fillG(st.s),key,w.mine&&!['CM','BOTH'].includes(st.r)?'':(st.r==='CM'||st.r==='BOTH'?'':st.r),S.set.detail==='voll'?fillG(st.n):'',!w.mine)}
+    SS.forEach((st,j)=>{const key=pg.id+':'+j;
+      if(st.k==='do'){const w=who(st.r);h+=rowDo(fillG(st.i),fillG(st.s),key,w.mine&&!['CM','BOTH'].includes(st.r)?'':(st.r==='CM'||st.r==='BOTH'?'':st.r),S.set.detail==='voll'?fillG(st.n):'',!w.mine,st.rz)}
       else if(st.k==='call')h+=`<div class="call${who(st.r).mine?' me':''}"><b>${esc(st.r)}</b>„${esc(fillG(st.t))}“${st.n&&S.set.detail==='voll'?`<i>${esc(st.n)}</i>`:''}</div>`;
       else if(st.k==='clh')h+=`<div class="sec">${esc(st.n.toUpperCase())} CHECKLIST<small>${st.part==='down'?'bis zur Linie':st.part==='below'?'unter der Linie':''}</small></div>`;
       else if(st.k==='cl')h+=rowDo(st.c.toUpperCase(),fillG(st.v),key,'',st.sub);
