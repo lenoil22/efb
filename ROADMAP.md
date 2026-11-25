@@ -1,5 +1,7 @@
 # Fahrplan
 
+**Reihenfolge (Stand 2026-11-25):** A1–A4 sind gebaut. Als Nächstes **Teil B** (PC-Bridge + ntfy). A5–A9 kommen später.
+
 ## A. iPad-EFB (index.html) – vom Nutzer freigegeben, noch nicht gebaut
 1. **Bildschirm bleibt an** – Screen Wake Lock API (Safari ≥ 16.4), Schalter in Einstellungen (Standard an), nach Tab-Wechsel neu anfordern.
 2. **Funk ⇄ Checkliste gekoppelt** – gemeinsame Phase: „Weiter“ in der Checkliste stellt den Funk-Tab auf die passende Phase/Anfrage, und umgekehrt.

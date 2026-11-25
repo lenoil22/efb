@@ -25,6 +25,7 @@ Sprache mit dem Nutzer: **Deutsch**. UI-Texte Deutsch, Funk-Phraseologie und Cal
 
 ### Wichtige Teile in index.html
 - `CHAIN` / Abdeckungslogik: top-down DEL→GND→TWR→DEP/APP→CTR („wer deckt wen ab“).
+- Sektoren (A4): VATSpy Data Project (`VATSpy.dat` + `Boundaries.geojson`, CC BY-SA 4.0) wird zur Laufzeit von raw.githubusercontent.com geladen und 7 Tage im Cache gehalten (`loadSectors`). `ctlSec()` ordnet Rufzeichen Sektoren zu (Sektor-Präfix → FIR → UIR), `covers()` = Lotsen über einem Punkt (FIS ausgeschlossen), `ctrInfo()` = aktueller Center + „Danach“ entlang der SimBrief-Wegpunkte. `S.ctrPick` = von Hand gewählt, gilt bis Sektorwechsel oder offline. Mehrere Zuständige (z. B. Low/High) werden **alle** gezeigt, nicht geraten.
 - ATIS-Parser: Buchstabe, aktive Pisten (Array, parallele Pisten), QNH → Warnung, wenn geplante Piste nicht aktiv.
 - Aussprache-Helfer: NATO-Alphabet, tree/fife/niner, Airline-Callsigns (`AIRL`), Städtenamen (`CITY`), `sidSp`.
 - `phrase()` / `renderFunk()` / `clrBlock()`: Funk-Tab. Werte als `<span class="vok|vmiss" data-e="key">` (grün = bekannt, orange = fehlt → antippen zum Eintragen).

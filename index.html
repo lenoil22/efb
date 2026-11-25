@@ -51,6 +51,7 @@ a{color:var(--c)}
 .opts button,.chip{font:13px "B612 Mono",monospace;padding:7px 13px;border-radius:99px;border:1px solid var(--line);color:var(--ink);min-height:36px;white-space:nowrap}
 .opts button.sel,.chip.on{border-color:var(--c);color:var(--c)}
 .optsep{font-size:12px;color:var(--dim);align-self:center;padding:0 4px}
+.ctrs{margin:10px 0 4px;display:flex;flex-direction:column;gap:6px}.ctrs .chip{font-size:12px}
 /* Funk */
 .phs{display:flex;gap:2px;margin:0 0 22px;overflow-x:auto}
 .phs button{font-size:12px;color:var(--dim);padding:6px 11px;border-radius:99px;white-space:nowrap}
@@ -308,12 +309,94 @@ const pre=c=>c.callsign.split('_')[0];
 /* Wer deckt eine Rolle an einem Platz ab (VATSIM top-down) */
 function cover(role,icao){
   icao=(icao||'').toUpperCase();if(!icao)return null;
+  /* Center/FSS über dem Platz: mit Sektordaten genau (Platz liegt im Sektor), sonst grob über die ersten zwei Buchstaben */
+  const apos=icao===(F().dep||'').toUpperCase()?F().depPos:icao===(F().arr||'').toUpperCase()?F().arrPos:null;
+  const sec=SEC.st==='ok'&&apos?new Set(covers(apos).map(x=>x.cs)):null;
   for(const fac of CHAIN[role]){
-    const list=V.ctl.filter(c=>c.facility===fac&&(fac>=6||fac===1?pre(c).slice(0,2)===icao.slice(0,2):pre(c)===icao));
+    const list=V.ctl.filter(c=>c.facility===fac&&!/_FIS_/.test(c.callsign)&&(fac>=6||fac===1?(sec?sec.has(c.callsign):pre(c).slice(0,2)===icao.slice(0,2)):pre(c)===icao));
     if(list.length){const c=list[0];const r=FAC[fac]==='APP'&&role==='DEP'?'DEP':FAC[fac];
       const nm=(fac>=6||fac===1)?(CITY[pre(c)]||pre(c)):(CITY[icao]||icao);
-      return{cs:c.callsign,freq:c.frequency,role:r,spoken:nm+' '+ROLEWORD[r],covering:fac!==CHAIN[role][0]}}
+      const sp=(fac>=6||fac===1)&&SEC.st==='ok'?ctlSec(c.callsign).s:nm+' '+ROLEWORD[r];
+      return{cs:c.callsign,freq:c.frequency,role:r,spoken:sp,covering:fac!==CHAIN[role][0]}}
   }return null;
+}
+/* ---------- Sektoren (VATSpy Data Project, CC BY-SA 4.0) ----------
+   Wer deckt meine Position ab, wer kommt entlang der SimBrief-Route als Nächstes?
+   Daten werden zur Laufzeit geladen (≈3 MB) und 7 Tage im Cache gehalten. */
+const VSP='https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/';
+const SEC={st:'',firs:[],uirs:{},poly:{},lbl:{},map:{},memo:null};
+async function vspGet(n){
+  const u=VSP+n;let c=null;try{c=await caches.open('efb-vatspy')}catch(e){}
+  if(c){const r=await c.match(u);if(r&&Date.now()-Date.parse(r.headers.get('date')||0)<7*864e5)return r.text()}
+  const r=await fetch(u);if(!r.ok)throw new Error(n+' '+r.status);
+  if(c)try{await c.put(u,r.clone())}catch(e){}
+  return r.text();
+}
+async function loadSectors(){
+  if(SEC.st==='load'||SEC.st==='ok')return;SEC.st='load';
+  try{
+    const[dat,geo]=await Promise.all([vspGet('VATSpy.dat'),vspGet('Boundaries.geojson')]);
+    let sec='';
+    for(const raw of dat.split(/\r?\n/)){const l=raw.trim();if(!l||l[0]===';')continue;if(l[0]==='['){sec=l;continue}
+      const p=l.split('|');
+      if(sec==='[FIRs]'&&p.length>=4)SEC.firs.push({icao:p[0],name:p[1],pre:p[2]||p[0],bnd:p[3]||p[0]});
+      if(sec==='[UIRs]'&&p.length>=3)SEC.uirs[p[0]]={name:p[1],firs:p[2].split(',')}}
+    for(const ft of JSON.parse(geo).features){const g=ft.geometry,id=ft.properties.id;if(!g)continue;
+      const polys=g.type==='MultiPolygon'?g.coordinates:[g.coordinates];
+      (SEC.poly[id]=SEC.poly[id]||[]).push(...polys.map(pl=>{const ring=pl[0];let a=1e9,b=-1e9,c=1e9,d=-1e9;for(const[x,y]of ring){a=Math.min(a,x);b=Math.max(b,x);c=Math.min(c,y);d=Math.max(d,y)}return{ring,bb:[a,b,c,d]}}));
+      SEC.lbl[id]=[+ft.properties.label_lat,+ft.properties.label_lon]}
+    SEC.st='ok';
+  }catch(e){SEC.st='err'}
+  SEC.memo=null;if(S.tab==='funk')renderFunk();if(S.tab==='check')renderCheck();
+}
+function inPoly(lat,lon,P){const[a,b,c,d]=P.bb;if(lon<a||lon>b||lat<c||lat>d)return false;
+  let r=false;const R=P.ring;for(let i=0,j=R.length-1;i<R.length;j=i++){const[xi,yi]=R[i],[xj,yj]=R[j];if((yi>lat)!==(yj>lat)&&lon<(xj-xi)*(lat-yi)/(yj-yi)+xi)r=!r}return r}
+const inBnd=(id,pt)=>(SEC.poly[id]||[]).some(P=>inPoly(pt[0],pt[1],P));
+/* Rufzeichen → Sektoren: erst Sektor-Präfix (EDGG_NH → EDGG-N), dann FIR (EDGG), dann UIR (EDUU) */
+function ctlSec(cs){
+  if(SEC.map[cs])return SEC.map[cs];const p=cs.toUpperCase().split('_'),p1=p[0],p2=p.length>2?p[0]+'_'+p[1]:'';
+  let rows=p2?SEC.firs.filter(f=>f.pre===p2):[],rank=3;
+  if(!rows.length){rows=SEC.firs.filter(f=>f.pre===p1&&f.bnd===f.icao);rank=2}
+  if(!rows.length){rows=SEC.firs.filter(f=>f.pre===p1);rank=2}
+  if(!rows.length&&SEC.uirs[p1]){const u=SEC.uirs[p1];rows=u.firs.map(i=>SEC.firs.find(f=>f.icao===i&&f.bnd===i)||SEC.firs.find(f=>f.icao===i)).filter(Boolean).map(f=>({...f,name:u.name}));rank=1}
+  let nm=(rows[0]?.name||CITY[p1]||p1).split(' - ')[0].trim().replace(/\bACC\b/,'Radar');
+  if(!/radar|control|centre|center|information/i.test(nm))nm=nm.replace(/^([^(]*?)(\s*\(|$)/,'$1 Radar$2');
+  const sp=CITY[p1]?CITY[p1]+' Radar':nm.replace(/\s*\(.*?\)/g,'');
+  return SEC.map[cs]={bnd:[...new Set(rows.map(r=>r.bnd))],rank,d:nm,s:sp};
+}
+/* IFR-Center: CTR/FSS, aber ohne FIS (z. B. EDXX_FIS_CTR „Langen Information“ – nur VFR-Fluginformation) */
+const ifrCtr=c=>(c.facility===6||c.facility===1)&&!/_FIS_/.test(c.callsign);
+function covers(pt){
+  const out=V.ctl.filter(ifrCtr).map(c=>({c,m:ctlSec(c.callsign)})).filter(x=>x.m.bnd.some(id=>inBnd(id,pt)));
+  const top=Math.max(0,...out.map(x=>x.m.rank));
+  return out.filter(x=>x.m.rank===top).map(x=>({cs:x.c.callsign,freq:x.c.frequency,d:x.m.d,s:x.m.s}));
+}
+/* Aktueller Center-Lotse (+ weitere für denselben Bereich) und der nächste entlang der Route */
+function ctrInfo(){
+  if(SEC.st!=='ok'||!V.t)return null;
+  const W=F().wps||[];const key=[+V.t,POS.p?.last_updated,S.ctrPick,S.ctrPickAt,W.length,F().dep].join('|');
+  if(SEC.memo&&SEC.memo.key===key)return SEC.memo.v;
+  let pt=null,start=0;
+  if(POS.p&&POS.p.groundspeed>=40){pt=[POS.p.latitude,POS.p.longitude];
+    let bi=-1,bd=1e9;W.forEach((w,i)=>{const d=nmTo(pt,w);if(d<bd){bd=d;bi=i}});start=bi+1}
+  else{const a=W.find(w=>covers(w).length);pt=a||F().depPos}
+  let cur=pt?covers(pt):[];
+  const nextAfter=ex=>{for(let k=start;k<W.length;k++){const cv=covers(W[k]);if(cv.length&&!cv.some(x=>ex.has(x.cs)))return{...cv[0],alt:cv.slice(1),at:W[k][2]}}
+    const a=cover('APP',F().arr);return a&&!ex.has(a.cs)?{cs:a.cs,freq:a.freq,d:a.spoken,s:a.spoken,alt:[],at:F().arr}:null};
+  let next=nextAfter(new Set(cur.map(x=>x.cs))),main=cur[0]||null;
+  SEC.autoMain=main?main.cs:'';
+  /* Von Hand gewählt („contact … on …“): gilt, bis der Lotse offline geht oder du in einen anderen Sektor fliegst */
+  const pk=S.ctrPick,on=pk&&V.ctl.find(c=>c.callsign===pk);
+  if(pk&&(!on||(S.ctrPickAt!==SEC.autoMain&&!cur.some(x=>x.cs===pk)))){S.ctrPick=null;save()}
+  else if(pk){const m=ctlSec(pk);main=cur.find(x=>x.cs===pk)||{cs:pk,freq:on.frequency,d:m.d,s:m.s};
+    const ex=new Set([...cur.map(x=>x.cs),pk]);cur=cur.some(x=>x.cs===pk)?cur:[main];next=nextAfter(ex)}
+  const v=main?{main,others:cur.filter(x=>x.cs!==main.cs),next,live:!!(POS.p&&POS.p.groundspeed>=40)}:{main:null,others:[],next,live:!!POS.p};
+  SEC.memo={key,v};return v;
+}
+/* Alle Center/FSS online, nach Entfernung zur Position sortiert (für „Andere“) */
+function ctrNear(){
+  const pt=POS.p?[POS.p.latitude,POS.p.longitude]:F().depPos;
+  return V.ctl.filter(ifrCtr).map(c=>{const m=ctlSec(c.callsign),l=m.bnd.map(id=>SEC.lbl[id]).find(Boolean);return{cs:c.callsign,freq:c.frequency,d:m.d,dist:pt&&l?nmTo(pt,l):9e9}}).sort((a,b)=>a.dist-b.dist).slice(0,12);
 }
 function atisOf(icao,kind){
   icao=(icao||'').toUpperCase();const a=V.atis.filter(x=>pre(x)===icao);
@@ -372,7 +455,7 @@ async function loadSB(){
     if(ta)f.ta=ta+' ft';if(tl)f.tl='FL'+String(Math.round(tl/100)).padStart(3,'0');if(ia)f.tod=String(Math.round((ia-el)*3/1000));
     if(j.fuel?.plan_ramp)f.fuel=j.fuel.plan_ramp+' '+String(j.params?.units||'kgs').toUpperCase().replace('KGS','KG').replace('LBS','LB');
     if(f.sid)remember(f.dep,f.sid);
-    S.f=f;S.ck={};S.phase='boden';save();renderAll();pullMetar();
+    S.f=f;S.ck={};S.phase='boden';S.ctrPick=null;save();renderAll();pullMetar();loadSectors();
     msg(`Geladen: ${f.cs} ${f.dep} → ${f.arr} (${f.type}).`,'ok');
   }catch(e){msg('SimBrief-Fehler: '+(e.message||e)+'. Du kannst alles auch von Hand eintragen.','err')}
 }
@@ -450,6 +533,8 @@ const REQ={
 };
 const ROLEFOR={DEL:['DEL','dep'],GND:['GND','dep'],TWR:['TWR','dep'],DEP:['DEP','dep'],CTR:['CTR','dep'],APP:['APP','arr']};
 function stnCtx(role,side){
+  if(role==='CTR'){const ci=ctrInfo();if(ci&&ci.main){const m=ci.main;return{t:m.d,d:m.s,s:m.s,c:{cs:m.cs,freq:m.freq,role:'CTR',spoken:m.s,covering:false},ci}}
+    if(ci)return{d:'Kein Center online',s:'Unicom',c:null,ci}}
   const icao=side==='arr'?F().arr:F().dep;const c=cover(role,icao);
   const word=role==='DEP'?'Departure':ROLEWORD[role];
   const nm=c?c.spoken:(CITY[(icao||'').toUpperCase()]||icao||'…')+' '+word;
@@ -468,7 +553,7 @@ function reqRole(ph,q){
 function atcLine(fp,rq,label){
   const q=(REQ[fp]||[]).find(x=>x.n===rq);if(!q)return'';
   const[role,side]=reqRole(fp,q),st=stnCtx(role,side),c=st.c;
-  return`<button class="atc" data-gfunk="${esc(fp)}|${esc(rq)}"><span class="atcb">Funk</span><span class="atct"><b>${esc(st.d)}</b> – ${esc(label)}<small>${c?esc(c.freq)+' · '+esc(c.cs):'Niemand online · Unicom 122.800'}</small></span><span class="atcg">›</span></button>`;
+  return`<button class="atc" data-gfunk="${esc(fp)}|${esc(rq)}"><span class="atcb">Funk</span><span class="atct"><b>${esc(st.t||st.d)}</b> – ${esc(label)}<small>${c?esc(c.freq)+' · '+esc(c.cs):'Niemand online · Unicom 122.800'}</small></span><span class="atcg">›</span></button>`;
 }
 function renderFunk(){
   $('#phases').innerHTML=PH.map(([k,n])=>`<button data-ph="${k}" class="${S.phase===k?'act':''}">${n}</button>`).join('');
@@ -477,9 +562,10 @@ function renderFunk(){
   const[role,side]=reqRole(ph,q);
   const st=stnCtx(role,side);CTX={stn:st};const c=st.c;
   const icao=side==='arr'?F().arr:F().dep;const at=atisOf(icao,side);
-  let h=`<p class="lbl" style="margin-top:0">Jetzt rufen</p><div class="stn-name">${esc(st.d)}</div>`;
+  let h=`<p class="lbl" style="margin-top:0">Jetzt rufen</p><div class="stn-name">${esc(st.t||st.d)}</div>`;
   h+=c?`<div class="freq">${esc(c.freq)}</div><p class="sub">${esc(c.cs)}${c.covering?' · übernimmt '+esc(role==='DEP'?'Departure':ROLEWORD[role]):''}${at?' · ATIS '+esc(at.code||'?')+' auf '+esc(at.freq):''}</p>`
        :`<div class="freq off">122.800</div><p class="sub">Niemand online – Unicom, Absichten blind senden${at?' · ATIS '+esc(at.code||'?'):''}</p>`;
+  if(role==='CTR')h+=ctrBlock(st.ci);
   h+=`<div class="${S.sp?'show-sp':''}">`;
   if(q.clr)h+=clrBlock();
   else if(q.init)h+=`<p class="lbl">Du sagst</p>${phrase(INIT[q.init])}<p class="sub" style="margin-top:8px">${esc(TIPS[q.init]||'')}</p>`;
@@ -487,6 +573,20 @@ function renderFunk(){
   h+=`</div><button class="tiny" data-q="sp">${S.sp?'Aussprache ausblenden':'Aussprache zeigen'}</button>`;
   h+=`<div class="bar"><div class="reqbar">${reqs.map((r,i)=>`<button class="chip ${i===qi?'on':''}" data-rq="${i}">${esc(r.n)}</button>`).join('')}<span class="sep"></span><button class="chip" data-q="sayagain">Say again</button><button class="chip" data-q="standby">Standby</button><button class="chip" data-q="unable">Unable</button><button class="chip em" data-q="em">Notfall</button></div></div>`;
   $('#funkBody').innerHTML=h;
+}
+/* Center: weitere Zuständige, nächster Lotse, Auswahl aller Center – alles per Tipp */
+function ctrBlock(ci){
+  if(SEC.st==='load'||SEC.st==='')return`<p class="sub ctrs">Sektordaten werden geladen …</p>`;
+  if(SEC.st==='err')return`<p class="sub ctrs">Sektordaten nicht erreichbar – Center nach Flughafen geschätzt.</p>`;
+  if(!ci)return'';
+  const chip=(x,lbl)=>`<button class="chip" data-ctr="${esc(x.cs)}">${esc(lbl||x.d)} · <span class="mono">${esc(x.freq)}</span></button>`;
+  let h='<div class="ctrs">';
+  if(!ci.live)h+=`<p class="sub">Noch keine VATSIM-Position – Center geschätzt nach dem Anfang deiner Route.</p>`;
+  if(ci.others.length)h+=`<div class="opts"><span class="optsep">Auch zuständig</span>${ci.others.map(x=>chip(x,x.cs)).join('')}</div>`;
+  if(ci.next)h+=`<div class="opts"><span class="optsep">Danach${ci.next.at?' (ab '+esc(ci.next.at)+')':''}</span>${chip(ci.next)}${ci.next.alt.map(x=>chip(x,x.cs)).join('')}</div>`;
+  h+=`<div class="opts"><button class="chip" data-ctrlist="1">${S.ctrList?'Liste schließen':'Anderen Lotsen wählen'}</button>${S.ctrPick?'<button class="chip" data-ctr="">Automatisch</button>':''}</div>`;
+  if(S.ctrList)h+=`<div class="opts">${ctrNear().map(x=>chip(x,x.cs)).join('')||'<span class="optsep">Kein Center online</span>'}</div>`;
+  return h+'</div>';
 }
 function clrBlock(){
   const f=F();const dep=(f.dep||'').toUpperCase();const ef=(f.exitFix||'').toUpperCase();
@@ -1109,7 +1209,7 @@ function renderSet(){
   $('#setBody').innerHTML=SETS.map(([k,l,o])=>`<div class="card"><h3>${esc(l)}</h3><div class="opts">${o.map(([v,t])=>`<button data-set="${k}" data-v="${v}" class="${S.set[k]===v?'sel':''}">${esc(t)}</button>`).join('')}</div>${k==='wake'?`<p class="msg" id="wakeMsg">${esc(wakeTxt())}</p>`:''}</div>`).join('')+
   `<div class="card"><h3>SimBrief-Benutzername</h3><div class="row"><input id="setUser" style="flex:1 1 220px;text-transform:none" value="${esc(S.user||'')}"><button class="btn ghost" id="setUserSave">Speichern</button></div></div>
    <div class="card"><h3>Flug</h3><div class="row"><button class="btn warn" id="setNew">Neuer Flug (alles zurücksetzen)</button></div></div>
-   <div class="card"><h3>Quellen</h3><p class="msg">Abläufe nach Airbus-A320-SOP-Struktur, abgeglichen mit der FlyByWire A32NX SOP, „A320 Normal Procedures" (TheAirlinePilots, 2025) und JayDees Fenix-A320-Guide v1.31.1 (Fenix-spezifische Schritte). Nur für die Flugsimulation.</p></div>`;
+   <div class="card"><h3>Quellen</h3><p class="msg">Abläufe nach Airbus-A320-SOP-Struktur, abgeglichen mit der FlyByWire A32NX SOP, „A320 Normal Procedures" (TheAirlinePilots, 2025) und JayDees Fenix-A320-Guide v1.31.1 (Fenix-spezifische Schritte). Sektorgrenzen: VATSpy Data Project (vatsimnetwork, CC BY-SA 4.0). Nur für die Flugsimulation.</p></div>`;
 }
 
 /* ---------- Checklisten-Seiten ---------- */
@@ -1230,7 +1330,7 @@ $('#ckBody').addEventListener('change',e=>{if(e.target.id==='pgSel')pgGo(+e.targ
 $('#t-set').addEventListener('click',e=>{
   let b;if(b=e.target.closest('[data-set]')){const k=b.dataset.set;let v=b.dataset.v;if(v==='true')v=true;if(v==='false')v=false;S.set[k]=v;save();renderSet();if(k==='wake')wakeSync();return}
   if(e.target.closest('#setUserSave')){S.user=$('#setUser').value.trim();save();e.target.textContent='Gespeichert';return}
-  if(e.target.closest('#setNew')){ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;S.vcs=null;S.posNo=null;save();tab('flug')}})}
+  if(e.target.closest('#setNew')){ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;S.vcs=null;S.posNo=null;S.ctrPick=null;save();tab('flug')}})}
 });
 $('#hSet').onclick=()=>tab('set');
 function renderOnline(){
@@ -1301,13 +1401,15 @@ $('#nav').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b
 $('#sbLoad').onclick=loadSB;
 $('#sbUser').addEventListener('keydown',e=>{if(e.key==='Enter')loadSB()});
 $('#t-flug').addEventListener('change',e=>{const k=e.target.dataset.k;if(!k)return;let v=e.target.value.trim();if(k!=='route')v=v.toUpperCase();if(['crz','clearedAlt'].includes(k))v=lvl(v);F()[k]=v;if(k==='sid')remember(F().dep,v);if(['dep','arr','altn'].includes(k))pullMetar();save();head()});
-$('#newFlight').onclick=()=>ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;S.vcs=null;S.posNo=null;save();renderAll()}});
+$('#newFlight').onclick=()=>ask('Neuer Flug? Tippe JA','',['JA'],0,v=>{if(v==='JA'){S.f=blank();S.ck={};S.x={};S.g={p:0,c:0,done:{}};S.phase='boden';S.req=null;S.vcs=null;S.posNo=null;S.ctrPick=null;save();renderAll()}});
 $('#phases').addEventListener('click',e=>{const b=e.target.closest('[data-ph]');if(!b)return;S.phase=b.dataset.ph;S.req=S.phase+'0';save();renderFunk()});
 $('#funkBody').addEventListener('click',e=>{
   const t=e.target;let b;
   if(b=t.closest('[data-rq]')){S.req=S.phase+b.dataset.rq;save();renderFunk();return}
   if(b=t.closest('[data-sid]')){const s=b.dataset.sid;if(s==='__other')ask('SID eintragen',F().exitFix?F().exitFix.slice(0,5):'',[],0,v=>{if(v){F().clrType='sid';set('sid',v)}});else{F().clrType='sid';set('sid',s)}return}
   if(b=t.closest('[data-clr]')){const c=b.dataset.clr;if(c==='hdg')ask('Heading',F().hdg,K.hdg.o,1,v=>{F().clrType='hdg';set('hdg',v)});else{F().clrType='vec';save();renderFunk()}return}
+  if(b=t.closest('[data-ctr]')){S.ctrPick=b.dataset.ctr||null;S.ctrPickAt=SEC.autoMain||'';S.ctrList=false;SEC.memo=null;save();renderFunk();return}
+  if(b=t.closest('[data-ctrlist]')){S.ctrList=!S.ctrList;renderFunk();return}
   if(b=t.closest('[data-clrrwy]')){S.set.clrRwy=b.dataset.clrrwy==='1';save();renderFunk();return}
   if(b=t.closest('[data-cmode]')){F().climbMode=b.dataset.cmode;save();renderFunk();return}
   if(b=t.closest('[data-climb]')){const c=b.dataset.climb;if(c==='__other')ask('Freigegebene Höhe (Steigen)',F().climb,['3000','8000','FL80','FL90'],0,v=>set('climb',lvl(v)));else set('climb',c);return}
@@ -1334,6 +1436,7 @@ if(F().climb==='VIA SID'){F().climb='';F().climbMode='sid'}  /* altes Format: �
 if(!F().dep&&S.tab!=='flug')S.tab='flug';
 renderAll();
 wakeSync();
+if(F().dep)loadSectors();
 pullVatsim();setInterval(pullVatsim,60000);
 if(F().dep){pullMetar();setInterval(pullMetar,600000)}
 }
