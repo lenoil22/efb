@@ -27,8 +27,16 @@ Ziel: Nutzer kann bei langen Flügen kurz weg und wird zuverlässig geholt, wenn
 - Liefert Live-Daten zusätzlich ans iPad-EFB (lokales WebSocket) → automatische Phase/Frequenz.
 
 **Handy (Android)**
-- Start: Push über **ntfy** (kostenlos, laut auch bei „Nicht stören“), keine eigene APK nötig.
-- Später evtl. eigene App mit Live-Status.
+- Vorbilder:
+  - **ContactMe**: Route-Center „Current / Upcoming“ mit Entfernung, vPilot-Status, Messages, Scratchpad.
+  - **SimAlert**: ATC-Abdeckung per Callsign.
+- Unsere App soll das alles können und zusätzlich:
+  - **Sim-Warnungen**: Master Caution / Master Warning, AP-Disconnect, Pause.
+  - **TOD-Alarm**.
+  - **Abwesenheits-Timer** (Alarm nach 25 min, siehe VATSIM-Regeln unten).
+  - **Kopplung mit dem iPad-EFB**: Der gemeldete Lotse wird im Funk-Tab zu „Jetzt rufen“.
+- Schritt 1: Push über **ntfy** (kostenlos, laut auch bei „Nicht stören“), keine eigene APK nötig.
+- Schritt 2: eigene Android-App (APK) mit Live-Status.
 - WhatsApp verworfen (nur über Business-API).
 
 **VATSIM-Regeln beachten:** CoC A9/B3 – Verbindung nicht unbeaufsichtigt lassen; max. 30 min weg, unter aktiver ATC nur mit Zustimmung des Lotsen. → Alarm „seit 25 min weg“ einbauen.
