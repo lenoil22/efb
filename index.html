@@ -50,6 +50,7 @@ a{color:var(--c)}
 .opts{display:flex;gap:6px;flex-wrap:wrap}
 .opts button,.chip{font:13px "B612 Mono",monospace;padding:7px 13px;border-radius:99px;border:1px solid var(--line);color:var(--ink);min-height:36px;white-space:nowrap}
 .opts button.sel,.chip.on{border-color:var(--c);color:var(--c)}
+.optsep{font-size:12px;color:var(--dim);align-self:center;padding:0 4px}
 /* Funk */
 .phs{display:flex;gap:2px;margin:0 0 22px;overflow-x:auto}
 .phs button{font-size:12px;color:var(--dim);padding:6px 11px;border-radius:99px;white-space:nowrap}
@@ -200,7 +201,7 @@ select{appearance:auto}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='efb.v1';
-const blank=()=>({cs:'',type:'',dep:'',arr:'',altn:'',gate:'',arrGate:'',crz:'',route:'',sid:'',star:'',exitFix:'',depRwy:'',arrRwy:'',squawk:'',atisDep:'',atisArr:'',qnhDep:'',qnhArr:'',clearedAlt:'',passing:'',nextFix:'',hdg:'',appType:'ILS',climb:'',ta:'',tl:'',tod:'',fuel:'',trim:'',flaps:'',vspeeds:'',mins:'',clrType:'sid',wps:[],depPos:null,arrPos:null,depElev:'',arrElev:''});
+const blank=()=>({cs:'',type:'',dep:'',arr:'',altn:'',gate:'',arrGate:'',crz:'',route:'',sid:'',star:'',exitFix:'',depRwy:'',arrRwy:'',squawk:'',atisDep:'',atisArr:'',qnhDep:'',qnhArr:'',clearedAlt:'',passing:'',nextFix:'',hdg:'',appType:'ILS',climb:'',climbMode:'sid',ta:'',tl:'',tod:'',fuel:'',trim:'',flaps:'',vspeeds:'',mins:'',clrType:'sid',wps:[],depPos:null,arrPos:null,depElev:'',arrElev:''});
 let S={user:'OnboardTransponder595',f:blank(),phase:'boden',mem:{},ck:{},tab:'flug',req:null,sp:false};
 try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s)S={...S,...s,f:{...blank(),...s.f}}}catch(e){}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
@@ -233,7 +234,7 @@ const K={
  clearedAlt:{l:'Freigegebene Höhe',sp:altSp,o:['5000','FL100','FL150','FL240']},passing:{l:'Passing (aktuelle Höhe)',sp:altSp,o:['3000','5000','FL80','FL120']},
  nextFix:{l:'Nächster Wegpunkt',sp:fixSp},hdg:{l:'Heading',sp:digits,num:1,o:['090','180','270','360']},appType:{l:'Anflugart',sp:s=>String(s||'').replace('ILS','I L S').replace('RNAV','R-nav').toLowerCase(),o:['ILS','RNAV','VISUAL','LOC']},
  fuel:{l:'Fuel (Block)'},ta:{l:'Transition Alt'},tl:{l:'Transition Level'},tod:{l:'TOD (NM vor Ziel)'},flaps:{l:'Flaps (CONF)',o:['1','1+F','2','3']},vspeeds:{l:'V1/VR/V2/FLX'},trim:{l:'Pitch trim'},mins:{l:'MDA/DH'},
- climb:{l:'Steigen',sp:s=>s==='VIA SID'?'climb via SID':'climb '+altSp(s)}
+ climb:{l:'Höhe (Steigen)',sp:altSp}
 };
 const FORM=['cs','type','dep','arr','altn','gate','arrGate','crz','ta','tl','tod','sid','exitFix','star','depRwy','arrRwy','squawk','atisDep','atisArr','qnhDep','qnhArr','fuel','flaps','vspeeds','trim','mins'];
 
@@ -380,7 +381,7 @@ function phrase(tpl){
     const k=m[1];
     if(k in CTX){const v=CTX[k];disp+=esc(v.d);spk.push(v.s);return}
     const v=F()[k];const meta=K[k]||{l:k};
-    if(v){disp+=`<span class="vok" data-e="${k}">${esc(k==='climb'&&v==='VIA SID'?'climb via SID':v)}</span>`;spk.push(meta.sp?meta.sp(v):v)}
+    if(v){disp+=`<span class="vok" data-e="${k}">${esc(v)}</span>`;spk.push(meta.sp?meta.sp(v):v)}
     else{disp+=`<span class="vmiss" data-e="${k}">${esc(meta.l)}</span>`;spk.push('['+meta.l+']')}
   });
   return`<div class="say">${disp}</div><div class="sp">${esc(spk.join('').replace(/\s+/g,' ').replace(/\s,/g,','))}</div>`;
@@ -477,12 +478,18 @@ function clrBlock(){
   let h=`<p class="lbl">Du sagst</p>${phrase(INIT.DEL)}`;
   h+=`<p class="lbl">Departure</p><div class="opts">`+sids.map(x=>`<button data-sid="${esc(x)}" class="${f.clrType==='sid'&&f.sid===x?'sel':''}">${esc(x)}</button>`).join('')+
      `<button data-clr="vec" class="${f.clrType==='vec'?'sel':''}">Vectors</button><button data-clr="hdg" class="${f.clrType==='hdg'?'sel':''}">Heading</button><button data-sid="__other">Andere</button></div>`;
-  h+=`<p class="lbl">Steigen</p><div class="opts">`+['VIA SID','5000','6000','FL70','FL100'].map(x=>`<button data-climb="${x}" class="${f.climb===x?'sel':''}">${x==='VIA SID'?'via SID':x}</button>`).join('')+`<button data-climb="__other">Andere</button></div>`;
+  h+=`<p class="lbl">Piste im Readback</p><div class="opts"><button data-clrrwy="0" class="${S.set.clrRwy?'':'sel'}">Weglassen</button><button data-clrrwy="1" class="${S.set.clrRwy?'sel':''}">Mitlesen</button></div>`;
+  /* Erst Art (climb via SID / initial climb), dann die Höhe – beides gehört zur Freigabe */
+  const cm=f.climbMode==='init'?'init':'sid',alts=['4000','5000','6000','7000','FL70','FL100'];
+  if(f.climb&&!alts.includes(f.climb))alts.push(f.climb);
+  h+=`<p class="lbl">Steigen</p><div class="opts"><button data-cmode="sid" class="${cm==='sid'?'sel':''}">Climb via SID</button><button data-cmode="init" class="${cm==='init'?'sel':''}">Initial climb</button></div>`+
+     `<div class="opts" style="margin-top:8px"><span class="optsep">bis</span>`+alts.map(x=>`<button data-climb="${esc(x)}" class="${f.climb===x?'sel':''}">${esc(x)}</button>`).join('')+`<button data-climb="__other">Andere</button></div>`;
   h+=`<p class="lbl">Squawk</p><div class="opts"><button data-e="squawk" class="${f.squawk?'sel':''}">${f.squawk?esc(f.squawk):'eintragen'}</button></div>`;
   if(at&&at.rwy&&f.depRwy&&!at.rws.includes(f.depRwy.toUpperCase()))h+=`<div class="warnbox">ATIS meldet ${esc(at.rws.join(' / '))}, geplant ist ${esc(f.depRwy)} – SID ändert sich wahrscheinlich.<button data-act="takeRwy">${esc(at.rwy)} übernehmen</button></div>`;
   const dpt=f.clrType==='vec'?'radar vectors':f.clrType==='hdg'?'heading {hdg}':'{sid} departure';
-  const climb=f.climb==='VIA SID'?'climb via SID':'initial climb {climb}';
-  h+=`<p class="lbl">Zurücklesen</p><div class="rbk">${phrase('Cleared to {arr}, '+dpt+', runway {depRwy}, '+climb+', squawk {squawk}, {cs}')}</div>`;
+  const climb=(cm==='init'?'initial climb ':'climb via SID to ')+'{climb}';
+  /* Deutsche DEL-Praxis: Departure, „flight planned route“, Steigen, Squawk – Piste meist nicht (optional) */
+  h+=`<p class="lbl">Zurücklesen</p><div class="rbk">${phrase('Cleared to {arr}, '+dpt+(S.set.clrRwy?', runway {depRwy}':'')+', flight planned route, '+climb+', squawk {squawk}, {cs}')}</div>`;
   return h;
 }
 /* ---------- Checklisten ---------- */
@@ -1035,7 +1042,7 @@ PM|BAT 1 + 2|OFF
 ];
 
 /* ---------- Einstellungen ---------- */
-S.set={seat:'CA',role:'PF',mode:'guided',detail:'voll',other:true,tts:false,wake:true,...(S.set||{})};
+S.set={seat:'CA',role:'PF',mode:'guided',detail:'voll',other:true,tts:false,wake:true,clrRwy:false,...(S.set||{})};
 S.g={p:0,i:0,done:{},...(S.g||{})};
 const SETS=[
  ['seat','Sitz',[['CA','Captain (links)'],['FO','First Officer (rechts)']]],
@@ -1268,7 +1275,9 @@ $('#funkBody').addEventListener('click',e=>{
   if(b=t.closest('[data-rq]')){S.req=S.phase+b.dataset.rq;save();renderFunk();return}
   if(b=t.closest('[data-sid]')){const s=b.dataset.sid;if(s==='__other')ask('SID eintragen',F().exitFix?F().exitFix.slice(0,5):'',[],0,v=>{if(v){F().clrType='sid';set('sid',v)}});else{F().clrType='sid';set('sid',s)}return}
   if(b=t.closest('[data-clr]')){const c=b.dataset.clr;if(c==='hdg')ask('Heading',F().hdg,K.hdg.o,1,v=>{F().clrType='hdg';set('hdg',v)});else{F().clrType='vec';save();renderFunk()}return}
-  if(b=t.closest('[data-climb]')){const c=b.dataset.climb;if(c==='__other')ask('Initial climb',F().climb==='VIA SID'?'':F().climb,['3000','7000','FL80'],0,v=>set('climb',lvl(v)));else set('climb',c);return}
+  if(b=t.closest('[data-clrrwy]')){S.set.clrRwy=b.dataset.clrrwy==='1';save();renderFunk();return}
+  if(b=t.closest('[data-cmode]')){F().climbMode=b.dataset.cmode;save();renderFunk();return}
+  if(b=t.closest('[data-climb]')){const c=b.dataset.climb;if(c==='__other')ask('Freigegebene Höhe (Steigen)',F().climb,['3000','8000','FL80','FL90'],0,v=>set('climb',lvl(v)));else set('climb',c);return}
   if(b=t.closest('[data-act="takeRwy"]')){const a=atisOf(F().dep,'dep');if(a)set('depRwy',a.rwy);return}
   if(b=t.closest('[data-q]')){quick(b.dataset.q);return}
   if(b=t.closest('[data-e]')){editKey(b.dataset.e)}
@@ -1288,6 +1297,7 @@ function quick(q){
 
 /* ---------- Start ---------- */
 if(S.tab==='karte')S.tab='funk';
+if(F().climb==='VIA SID'){F().climb='';F().climbMode='sid'}  /* altes Format: „via SID“ ohne Höhe */
 if(!F().dep&&S.tab!=='flug')S.tab='flug';
 renderAll();
 wakeSync();
