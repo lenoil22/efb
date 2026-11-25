@@ -1,0 +1,6 @@
+# Bridge: privater ntfy-Kanal, lokale Diagnose und gebaute Dateien – nie ins öffentliche Repo
+bridge/config.json
+bridge/lvars-gefunden.txt
+bridge/bridge.log
+bridge/EFB-Bridge.exe
+bridge/app/efb.ico

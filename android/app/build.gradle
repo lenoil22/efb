@@ -1,0 +1,26 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'de.efbwaechter.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'de.efbwaechter.app'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '0.1'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug   // nur zum Selbst-Installieren, nicht für den Play Store
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

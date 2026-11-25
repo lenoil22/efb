@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0f16">
+<title>EFB Wächter</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* Handy-Oberfläche der Android-App „EFB Wächter“ (läuft in deren WebView, Fenster: window.EFBApp).
+   Im normalen Browser: nur Status + Weg/Zurück über ntfy (Kanal hinter #). */
+:root{--bg:#0a0f16;--p1:#111821;--line:#1d2836;--ink:#e9eef5;--dim:#7d8ea3;--mut:#526276;--g:#3fe08a;--a:#ffb020;--c:#3cc8ff;--r:#ff5a5a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "B612",system-ui,sans-serif;padding:calc(14px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))}
+.mono{font-family:"B612 Mono",ui-monospace,monospace}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+header h1{font-size:18px;margin:0;flex:1}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mut)}.dot.on{background:var(--g)}.dot.warn{background:var(--a)}
+h3{font-size:11px;letter-spacing:.07em;color:var(--dim);font-weight:400;margin:22px 0 8px;text-transform:uppercase}
+.card{background:var(--p1);border:1px solid var(--line);border-radius:14px;padding:14px}
+.big{display:block;width:100%;border-radius:14px;padding:18px;font-weight:700;font-size:19px;min-height:64px}
+.big.go{background:var(--c);color:#04121c}.big.back{background:var(--g);color:#04121c}
+.away-t{font:700 34px/1.1 "B612 Mono",monospace;color:var(--a);margin:0 0 4px}
+.sub{font-size:13px;color:var(--dim);margin:0}
+.rows div{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line)}.rows div:first-child{border-top:0}
+.rows b{font-weight:400;color:var(--dim)}.ok{color:var(--g)}.no{color:var(--a)}.off{color:var(--mut)}
+.al{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.al:first-child{border-top:0}
+.al span{flex:1;font-size:14px}
+.seg{display:flex;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+.seg button{font-size:12px;padding:7px 10px;color:var(--dim);min-height:34px}
+.seg button.sel{background:var(--ink);color:var(--bg)}.seg button.sel.w{background:var(--a)}
+.hist div{padding:7px 0;border-top:1px solid var(--line);font-size:13px}.hist div:first-child{border-top:0}
+.hist i{font-style:normal;color:var(--mut);font-family:"B612 Mono",monospace;margin-right:8px}
+.btn{border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;color:var(--c);min-height:40px}
+.fix{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}.fix:first-child{border-top:0}.fix span{flex:1}
+input{font:15px "B612 Mono",monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
+.hide{display:none}
+.msg{font-size:12px;color:var(--dim);margin:8px 0 0}
+</style>
+</head>
+<body>
+<header><span class="dot" id="dot"></span><h1>EFB Wächter</h1><span class="sub" id="stand"></span></header>
+
+<div id="setup" class="card hide">
+  <p style="margin:0 0 10px">Noch nicht mit dem PC gekoppelt.</p>
+  <p class="sub">Am PC: Symbol der EFB Bridge → Rechtsklick → <b>Handy koppeln</b> → QR-Code mit der Handy-Kamera scannen. Oder den Kanal hier einfügen:</p>
+  <div style="display:flex;gap:8px;margin-top:10px"><input id="topicIn" placeholder="efb-…" autocomplete="off" autocapitalize="off"><button class="btn" id="topicSave">Koppeln</button></div>
+</div>
+
+<div id="main" class="hide">
+  <div class="card" id="awayCard"></div>
+
+  <h3>PC und Sim</h3>
+  <div class="card rows" id="stat"></div>
+
+  <h3>Flugdaten</h3>
+  <div class="card"><p class="sub">Kommt im nächsten Schritt: Höhe, Geschwindigkeit, Phase, TOD und Lotsen live aus VATSIM.</p></div>
+
+  <div id="appOnly">
+    <h3>Alarme</h3>
+    <div class="card" id="alarms"></div>
+    <p class="msg">Wecker = klingelt im Vollbild über die Wecker-Lautstärke, bis du „Bin dran“ tippst.</p>
+    <div style="margin-top:10px"><button class="btn" id="testW">Wecker testen</button></div>
+
+    <h3>Einrichtung</h3>
+    <div class="card" id="fixes"></div>
+  </div>
+
+  <h3>Verlauf</h3>
+  <div class="card hist" id="hist"></div>
+
+  <h3>Kopplung</h3>
+  <div class="card"><p class="sub mono" id="topicShow" style="word-break:break-all"></p><div style="margin-top:8px"><button class="btn" id="unpair">Anderen Kanal eingeben</button></div></div>
+</div>
+
+<script>
+{
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const APP=window.EFBApp||null;
+const KINDS=[['tod','Top of Descent'],['warning','Master Warning'],['ap','Autopilot aus'],['away','Weg-Modus abgelaufen'],['caution','Master Caution'],['pause','Sim pausiert'],['test','Test vom PC'],['info','Infos (Bridge gestartet …)']];
+const MODES=['Aus','Nachricht','Wecker'];
+const NTFY='https://ntfy.sh';
+let S={topic:'',modes:{},history:[],status:null,connected:false,fsi:true,battery:true,notif:true};
+
+/* ---------- Zustand: aus der App oder (Browser) aus ntfy ---------- */
+function load(){
+  if(APP){try{S=JSON.parse(APP.state())}catch(e){}}
+  else{S.topic=decodeURIComponent(location.hash.slice(1))||localStorage.getItem('efb.topic')||''}
+  render();
+}
+window.efbUpdate=load;      // ruft die App auf, wenn sich etwas ändert
+let es=null;
+function browserListen(){
+  if(APP||!S.topic||es)return;
+  localStorage.setItem('efb.topic',S.topic);
+  es=new EventSource(`${NTFY}/${encodeURIComponent(S.topic)}-status/sse?since=12h`);
+  es.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.event==='message'){S.status={...JSON.parse(m.message),rx:m.time*1000};S.connected=true;render()}}catch(err){}};
+  es.onerror=()=>{S.connected=false;render()};
+}
+function send(cmd){
+  if(APP){APP.send(cmd);return}
+  fetch(`${NTFY}/${encodeURIComponent(S.topic)}-cmd`,{method:'POST',body:cmd}).catch(()=>{});
+}
+
+/* ---------- Anzeige ---------- */
+const hm=t=>new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+function render(){
+  $('#setup').classList.toggle('hide',!!S.topic);
+  $('#main').classList.toggle('hide',!S.topic);
+  $('#appOnly').classList.toggle('hide',!APP);
+  if(!S.topic)return;
+  const st=S.status||{};const pcOn=!!st.on;
+  $('#dot').className='dot '+(st.away?'warn':pcOn&&S.connected?'on':'');
+  $('#stand').textContent=st.rx?'Stand '+hm(st.rx):'';
+  // Weg-Modus
+  if(st.away){
+    const gone=Math.max(0,(Date.now()-st.awaySince)/60000),left=Math.max(0,(st.awayMin||25)-gone);
+    $('#awayCard').innerHTML=`<p class="away-t">${Math.floor(gone)} min weg</p><p class="sub">${left>0?`Alarm in ${Math.ceil(left)} min (VATSIM: max. 30 min)`:'Zeit abgelaufen – zurück an den PC!'}</p><div style="height:12px"></div><button class="big back" data-cmd="da">Bin zurück</button>`;
+  }else{
+    $('#awayCard').innerHTML=`<p class="sub" style="margin-bottom:10px">${pcOn?'Du bist am PC.':'PC-Bridge ist aus – Weg-Modus geht erst, wenn sie läuft.'}</p><button class="big go" data-cmd="weg" ${pcOn?'':'disabled style="opacity:.4"'}>Ich bin weg</button>`;
+  }
+  // Status
+  const yn=(b,y,n)=>`<span class="${b?'ok':'no'}">${b?y:n}</span>`;
+  $('#stat').innerHTML=`<div><b>Verbindung</b>${yn(S.connected,'verbunden','getrennt – verbindet …')}</div>`+
+    `<div><b>PC-Bridge</b>${yn(pcOn,'läuft','aus')}</div>`+
+    (pcOn?`<div><b>Simulator</b>${yn(st.sim,'verbunden','wartet')}</div><div><b>Fenix</b>${yn(st.fenix,'wird überwacht','nicht geladen')}</div>`:'');
+  // Alarme
+  if(APP){
+    $('#alarms').innerHTML=KINDS.map(([k,n])=>{const m=S.modes[k]??0;
+      return`<div class="al"><span>${esc(n)}</span><div class="seg">${MODES.map((t,i)=>`<button data-k="${k}" data-m="${i}" class="${i===m?'sel'+(i===2?' w':''):''}">${t}</button>`).join('')}</div></div>`}).join('');
+    const fx=[[S.notif,'Benachrichtigungen erlaubt','notif'],[S.fsi,'Vollbild-Wecker erlaubt','fsi'],[S.battery,'Akku-Optimierung aus (App läuft im Hintergrund)','battery']];
+    $('#fixes').innerHTML=fx.map(([ok,t,a])=>`<div class="fix"><span>${t}</span>${ok?'<span class="ok" style="flex:none">✓</span>':`<button class="btn" data-fix="${a}">Erlauben</button>`}</div>`).join('');
+  }
+  // Verlauf
+  const h=(S.history||[]).slice(-25).reverse();
+  $('#hist').innerHTML=h.length?h.map(x=>`<div><i>${hm(x.t)}</i>${esc(x.title)}${x.mode===2?' <span class="no">· Wecker</span>':''}</div>`).join(''):'<span class="sub">Noch keine Alarme.</span>';
+  $('#topicShow').textContent=S.topic;
+}
+setInterval(()=>{if(S.status&&S.status.away)render()},20000);
+
+/* ---------- Bedienung ---------- */
+document.addEventListener('click',e=>{
+  let b;
+  if(b=e.target.closest('[data-cmd]')){send(b.dataset.cmd);if(S.status){S.status.away=b.dataset.cmd==='weg';S.status.awaySince=Date.now()}render();return}
+  if(b=e.target.closest('[data-k]')){APP&&APP.setMode(b.dataset.k,+b.dataset.m);load();return}
+  if(b=e.target.closest('[data-fix]')){const a=b.dataset.fix;APP&&(a==='fsi'?APP.openFsi():a==='battery'?APP.openBattery():APP.openNotif());return}
+  if(e.target.closest('#testW')){APP&&APP.testAlarm('test');return}
+  if(e.target.closest('#topicSave')){const t=$('#topicIn').value.trim();if(!/^efb-[a-z0-9]{8,}$/i.test(t)){alert('Das sieht nicht wie ein Kanal aus (efb-…).');return}
+    if(APP)APP.setTopic(t);else{location.hash=t;S.topic=t;browserListen()}load();return}
+  if(e.target.closest('#unpair')){if(APP)APP.setTopic('');else{location.hash='';localStorage.removeItem('efb.topic');S.topic=''}load();return}
+});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
+load();browserListen();
+}
+</script>
+</body>
+</html>

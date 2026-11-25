@@ -41,6 +41,20 @@ Sprache mit dem Nutzer: **Deutsch**. UI-Texte Deutsch, Funk-Phraseologie und Cal
   - Platzhalter `{flex}`, `{ta}`, `{tl}`, `{tod}`, `{qnhArr}` … werden aus dem Flug gefüllt.
 - Quellen der Procedures: FlyByWire A32NX SOP, TheAirlinePilots „A320 Normal Procedures“ (Apr 2025), JayDee's Fenix Guide v1.31.1. Bei Änderungen gegen echte Airbus-SOP prüfen – **nichts auslassen**.
 
+## PC-Bridge (Teil B) – `bridge/`
+- **Tray-App `EFB-Bridge.exe`** (Quelle `bridge/app/EFB-Bridge.cs`, C# 5 / .NET Framework 4.x, gebaut mit dem Windows-eigenen `csc.exe` über `bridge/app/build.bat`; exe + ico sind gitignored). Startet `bridge.mjs` unsichtbar (stdin = Befehle `w`/`d`/`t`/`s`/`q` zeilenweise, stdout = Verlauf + `@status {json}`), startet bei Bedarf `FSUIPCWebSocketServer.exe` mit, Symbol neben der Uhr (grau/blau/grün/amber/rot), Statusfenster, `bridge.log`. Mit `-msfs` (Eintrag „EFB Bridge“ in der MSFS-EXE.xml) beendet sie sich, wenn MSFS zugeht. `start.bat` bleibt als Konsolen-Variante.
+- `bridge.mjs` (Node ≥ 22, **keine npm-Pakete**). Läuft auf dem Sim-PC des Nutzers (Windows, MSFS 2024, Fenix, FSUIPC7 **unregistriert** → keine Lua-Skripte).
+- Daten: **FSUIPC WebSocket Server** (`C:\FSUIPC7\Utils\FSUIPCWebSocketServer.exe`, v1.1.4), `ws://localhost:2048/fsuipc/`, Subprotokoll `fsuipc`. Offsets: 0x0560/0x0568 (lat/lon), 0x0570 (Höhe, int 8), 0x02B4 (GS), 0x0366 (am Boden), 0x0264 (Pause). L-Vars über `vars.list` → `pickLvars()` (bevorzugt `I_MIP_MASTER_WARNING_CAPT`, `I_MIP_MASTER_CAUTION_CAPT`, `I_FCU_AP1/2`, sonst per Muster). Die echten Namen beim ersten Lauf in `lvars-gefunden.txt` prüfen.
+- Push über **ntfy** (`https://ntfy.sh`): geheimer Kanal in `bridge/config.json` (gitignored, wird beim ersten Start erzeugt). Befehle vom Handy über Kanal `<topic>-cmd` („weg“/„da“, Knopf „Bin zurück“).
+- Alarme: Master Warning (prio 5), Master Caution (4), AP aus in der Luft (5), Pause in der Luft > 10 s (4), TOD in ≤ 5 min (SimBrief-Fix „TOD“), Weg-Modus 25 min (5). Alarm-Logik in `makeMonitor()` ohne Netz → testbar.
+
+## Handy-App „EFB Wächter“ (Teil B) – `android/` + `handy/`
+- Android-App (Java, **ohne AndroidX/Bibliotheken**, minSdk 26, compileSdk 36, AGP 8.13.0 per `buildscript`). Bauen: `JAVA_HOME=…\Android Studio\jbr`, `android\gradlew.bat assembleDebug` → `android\EFB-Waechter.apk` (gitignored, Debug-signiert, zum Selbst-Installieren).
+- `WatchService`: Vordergrunddienst (`specialUse`), ntfy-JSON-Stream auf `<topic>,<topic>-status`, Wiederaufnahme per `since=<lastId>`; alte Meldungen (> 2 min) nur in den Verlauf. Pro Alarmart (Tag `efb-<kind>`: tod, warning, ap, away, caution, pause, test, info) Modus 0 aus / 1 Nachricht / 2 **Wecker**: MediaPlayer mit `USAGE_ALARM` in Dauerschleife, Vibration, Full-Screen-Intent → `AlarmActivity` (auch auf dem Sperrbildschirm), „Bin dran“ schickt `da` an `<topic>-cmd`, Auto-Stopp nach 5 min.
+- Oberfläche = **`handy/index.html`** (GitHub Pages) in einer WebView, Schnittstelle `window.EFBApp` (state, setMode, send, testAlarm, setTopic, openFsi/openBattery/openNotif), die App ruft `efbUpdate()` bei Änderungen. Im normalen Browser läuft die Seite eingeschränkt (Status per SSE, Weg/Zurück per POST, Kanal hinter `#`).
+- Koppeln: `koppeln.html#<topic>` zeigt einen QR-Code `efbwaechter://pair?topic=…` (qrcodejs 1.0.0 von cdnjs). Die Tray-App öffnet ihn über „Handy koppeln“.
+- Bridge-Status für die App: `<topic>-status` nur bei Änderung (3 s gesammelt), weil ntfy.sh **250 Nachrichten/Tag** erlaubt. Live-Flugdaten holt die App selbst von VATSIM (Schritt 2).
+
 ## Deploy
 Push auf `main` → GitHub Pages baut neu (~1 min). Danach im Browser mit `?v=<n>` testen (Cache).
 Vor jedem Push: JS-Syntax prüfen (Script extrahieren, `node --check`) und im iPad-Format (768×1024) ansehen.

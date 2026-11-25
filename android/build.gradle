@@ -1,0 +1,5 @@
+// EFB Wächter – Android-App (Wecker-Alarme aus der PC-Bridge, Oberfläche als Web-Teil)
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools.build:gradle:8.13.0' }
+}
