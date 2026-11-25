@@ -3,106 +3,212 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a0f16">
+<meta name="theme-color" content="#0A0E13">
 <title>EFB Wächter</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=B612+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
 /* Handy-Oberfläche der Android-App „EFB Wächter“ (läuft in deren WebView, Fenster: window.EFBApp).
-   Im normalen Browser: nur Status + Weg/Zurück über ntfy (Kanal hinter #). */
-:root{--bg:#0a0f16;--p1:#111821;--line:#1d2836;--ink:#e9eef5;--dim:#7d8ea3;--mut:#526276;--g:#3fe08a;--a:#ffb020;--c:#3cc8ff;--r:#ff5a5a}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "B612",system-ui,sans-serif;padding:calc(14px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))}
-.mono{font-family:"B612 Mono",ui-monospace,monospace}
-button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-header h1{font-size:18px;margin:0;flex:1}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--mut)}.dot.on{background:var(--g)}.dot.warn{background:var(--a)}
-h3{font-size:11px;letter-spacing:.07em;color:var(--dim);font-weight:400;margin:22px 0 8px;text-transform:uppercase}
-.card{background:var(--p1);border:1px solid var(--line);border-radius:14px;padding:14px}
-.big{display:block;width:100%;border-radius:14px;padding:18px;font-weight:700;font-size:19px;min-height:64px}
-.big.go{background:var(--c);color:#04121c}.big.back{background:var(--g);color:#04121c}
-.away-t{font:700 34px/1.1 "B612 Mono",monospace;color:var(--a);margin:0 0 4px}
-.sub{font-size:13px;color:var(--dim);margin:0}
-.rows div{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line)}.rows div:first-child{border-top:0}
-.rows b{font-weight:400;color:var(--dim)}.ok{color:var(--g)}.no{color:var(--a)}.off{color:var(--mut)}
-.al{padding:10px 0;border-top:1px solid var(--line)}.al:first-child{border-top:0}
-.al span{display:block;font-size:14px;margin-bottom:6px}
-.seg{display:flex;border:1px solid var(--line);border-radius:99px;overflow:hidden}
-.seg button{flex:1;font-size:12px;padding:7px 4px;color:var(--dim);min-height:36px;line-height:1.2}
-.seg button.sel{background:var(--ink);color:var(--bg)}.seg button.sel.w{background:var(--a)}
-.hist div{padding:7px 0;border-top:1px solid var(--line);font-size:13px}.hist div:first-child{border-top:0}
-.hist i{font-style:normal;color:var(--mut);font-family:"B612 Mono",monospace;margin-right:8px}
-.btn{border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;color:var(--c);min-height:40px}
-.fix{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}.fix:first-child{border-top:0}.fix span{flex:1}
-input{font:15px "B612 Mono",monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
-.hide{display:none}
-.msg{font-size:12px;color:var(--dim);margin:8px 0 0}
-.fdg{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
-.fdg div b{display:block;font-size:11px;font-weight:400;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
-.fdg div span{font:700 26px/1.15 "B612 Mono",monospace;color:var(--g)}
-.fdg div span.s{font-size:18px;color:var(--ink)}
-.prog{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:14px}
-.prog .tod{color:var(--a)}
-.fdg .tm{border-top:1px solid var(--line);padding-top:10px}
-.fdg .tm span.tod{color:var(--a)}
-.fdg .tm span small{font-size:12px;color:var(--mut);font-weight:400}
-.fdg .tm i{display:block;font-style:normal;font-size:12px;color:var(--dim)}
-.st{padding:9px 0;border-top:1px solid var(--line)}.st:first-child{border-top:0}
-.st small{display:block;font-size:11px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
-.st .n{font-size:16px}.st .f{font:700 22px "B612 Mono",monospace;color:var(--g);float:right;margin-top:-4px}
-.st .x{font-size:12px;color:var(--mut)}
-.st.nx .f{color:var(--c)}
+   Im normalen Browser: Status + Weg/Zurück über ntfy (Kanal hinter #), Flugdaten von VATSIM.
+   Design: siehe Vault „EFB Wächter Design“ – Systemschrift für Text, B612 Mono für Zahlen,
+   Cyan = Aktion, Grün = Daten/OK, Orange = TOD/Weg, Rot = Warnung; Tab-Leiste als Material. */
+:root{
+  --bg:#0A0E13;--s1:#121820;--s2:#19212B;--s3:#222C38;
+  --line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.12);
+  --t1:#EEF2F7;--t2:#A3B1C2;--t3:#6E7D90;
+  --cyan:#4CC9F0;--green:#3DDC97;--amber:#FFB547;--red:#FF5D5D;
+  --r-lg:22px;--r-md:16px;--r-sm:12px;
+  --mono:"B612 Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--t1);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:calc(18px + env(safe-area-inset-top)) 16px calc(104px + env(safe-area-inset-bottom));min-height:100vh;transition:background .4s ease}
+body.away{background:radial-gradient(120% 50% at 50% 0%,rgba(255,181,71,.15),transparent 60%),var(--bg) no-repeat}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+input{font:15px var(--mono);background:var(--s2);color:var(--t1);border:1px solid var(--line2);border-radius:var(--r-sm);padding:12px;width:100%;min-height:46px}
+input:focus{outline:2px solid var(--cyan);outline-offset:1px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.hide{display:none!important}
+/* Kopf */
+.lt{font-size:31px;font-weight:700;letter-spacing:-.025em;line-height:1.05}
+.eyebrow{font-size:12px;font-weight:600;color:var(--t3);letter-spacing:.06em;text-transform:uppercase}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 16px;min-height:28px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:99px;background:var(--s1);border:1px solid var(--line);font-size:12px;color:var(--t2)}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--t3)}
+.pill.ok i{background:var(--green);box-shadow:0 0 0 3px rgba(61,220,151,.15)}
+.pill.warn i{background:var(--amber)}
+.pill.live{color:var(--green);border-color:rgba(61,220,151,.28)}
+/* Karten und Abschnitte */
+.card{background:var(--s1);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}
+.card+.card{margin-top:12px}
+.sec{margin:22px 4px 8px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sec span{font-size:12px;color:var(--t3);text-align:right}
+.sub{font-size:13px;color:var(--t2)}
+.note{font-size:12px;color:var(--t3);margin:8px 4px 0;line-height:1.5}
+/* Knöpfe */
+.cta{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:58px;border-radius:var(--r-md);font-weight:700;font-size:18px;letter-spacing:-.01em;transition:transform .1s ease-out,opacity .15s}
+.cta:active{transform:scale(.97)}
+.cta svg{width:22px;height:22px}
+.cta.go{background:var(--cyan);color:#03131B}
+.cta.back{background:var(--green);color:#03170E;min-height:68px;font-size:20px}
+.cta:disabled{opacity:.35}
+.hint{font-size:13px;color:var(--t2);text-align:center;margin-top:10px}
+.ghost{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;border:1px solid var(--line2);border-radius:var(--r-md);color:var(--cyan);font-weight:600;font-size:15px;transition:transform .1s}
+.ghost:active{transform:scale(.98)}
+.btn-s{min-height:36px;padding:0 14px;border-radius:99px;border:1px solid rgba(76,201,240,.4);color:var(--cyan);font-size:13px;font-weight:600}
+/* Weg-Modus */
+.ring{position:relative;width:200px;height:200px;margin:4px auto 6px}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{transition:stroke-dashoffset .6s ease}
+.ring .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring .c b{font:700 54px/1 var(--mono);letter-spacing:-.03em;color:var(--amber)}
+.ring .c span{font-size:13px;color:var(--t2);margin-top:6px}
+.ring.over .c b{color:var(--red)}
+/* Flug */
+.flt{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.flt .cs{font:700 15px var(--mono)}
+.flt .rt{font-size:13px;color:var(--t2);flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:99px;font-size:12px;font-weight:600;background:var(--s3);color:var(--t1);white-space:nowrap}
+.inst{display:grid;grid-template-columns:1.15fr 1fr .95fr;gap:2px;background:var(--line);border-radius:var(--r-md);overflow:hidden}
+.inst div{background:var(--s1);padding:12px 12px 10px}
+.inst b{display:block;font-size:11px;font-weight:600;color:var(--t3);letter-spacing:.06em}
+.inst span{display:block;font:700 26px/1.1 var(--mono);color:var(--green);letter-spacing:-.02em;margin-top:4px}
+.inst span.n{color:var(--t1)}
+.inst small{font:600 12px var(--mono);color:var(--t3)}
+.times{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.tile{background:var(--s2);border-radius:var(--r-md);padding:12px}
+.tile b{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--t3)}
+.tile .big{font-size:23px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.tile .big.amber{color:var(--amber)}
+.tile .sm{font:12px var(--mono);color:var(--t2);margin-top:2px}
+.track{position:relative;height:34px;margin:14px 4px 0}
+.track .line{position:absolute;left:0;right:0;top:9px;height:4px;border-radius:2px;background:var(--s3)}
+.track .done{position:absolute;left:0;top:9px;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--cyan),var(--green))}
+.track .me{position:absolute;top:2px;width:18px;height:18px;margin-left:-9px;color:var(--t1);transform:rotate(90deg)}
+.track .tod{position:absolute;top:5px;width:2px;height:12px;background:var(--amber)}
+.track .lbl{position:absolute;top:22px;font:11px var(--mono);color:var(--t3);transform:translateX(-50%)}
+.track .lbl.l{transform:none;left:0}.track .lbl.r{transform:none;right:0}
+/* Lotsen-Zeitleiste */
+.atc{position:relative;padding-left:42px}
+.atc:before{content:"";position:absolute;left:21px;top:30px;bottom:30px;width:2px;background:var(--s3)}
+.st{position:relative;padding:8px 0 12px}
+.st:before{content:"";position:absolute;left:-26px;top:13px;width:12px;height:12px;border-radius:50%;background:var(--s1);border:2px solid var(--t3)}
+.st.now:before{background:var(--green);border-color:var(--green);box-shadow:0 0 0 4px rgba(61,220,151,.15)}
+.st.next:before{border-color:var(--cyan)}
+.st small{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--t3);text-transform:uppercase}
+.st .n{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:2px}
+.st .n span{font-size:15px;font-weight:600}
+.st .f{font:700 19px var(--mono);color:var(--green);white-space:nowrap}
+.st.next .f{color:var(--cyan)}
+.st .x{font:12px var(--mono);color:var(--t3);margin-top:1px}
+.dest{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dest .chip{background:var(--s2);font-weight:500}.dest .chip em{font-style:normal;font-family:var(--mono);color:var(--green)}
+/* Listen (Alarme, Verlauf, Einrichtung) */
+.list{padding:2px 16px}
+.it{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 0;border-top:1px solid var(--line);width:100%;text-align:left}
+.it:first-child{border-top:0}
+button.it:active{opacity:.7}
+.ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+.ic svg{width:19px;height:19px}
+.ic.c{background:rgba(76,201,240,.14);color:var(--cyan)}.ic.a{background:rgba(255,181,71,.14);color:var(--amber)}
+.ic.r{background:rgba(255,93,93,.14);color:var(--red)}.ic.g{background:rgba(61,220,151,.14);color:var(--green)}.ic.n{background:rgba(163,177,194,.12);color:var(--t2)}
+.it .tx{flex:1;min-width:0}.it .tx b{display:block;font-size:15px;font-weight:600}.it .tx span{display:block;font-size:12px;color:var(--t2)}
+.it .v{font-size:13px;color:var(--t2);display:flex;align-items:center;gap:4px;text-align:right}
+.it .v svg{width:14px;height:14px;color:var(--t3);flex:none;transition:transform .2s}
+.it.open .v svg{transform:rotate(90deg)}
+.it .v.w{color:var(--amber)}
+.it .tm{font:12px var(--mono);color:var(--t3);white-space:nowrap}
+.pick{margin:0 0 10px 46px;background:var(--s2);border-radius:var(--r-sm);overflow:hidden}
+.opt{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:48px;padding:6px 14px;border-top:1px solid var(--line);font-size:14px;text-align:left}
+.opt:first-child{border-top:0}.opt:active{background:var(--s3)}
+.opt em{display:block;font-style:normal;font-size:12px;color:var(--t3)}
+.opt.on{color:var(--cyan)}.opt svg{width:18px;height:18px;flex:none}
+.ok{color:var(--green)}.no{color:var(--amber)}
+/* Tab-Leiste: Material, Inhalt scrollt darunter */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(3,1fr);padding:8px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(10,14,19,.74);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border-top:1px solid var(--line)}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:50px;justify-content:center;font-size:11px;font-weight:600;color:var(--t3)}
+.tab svg{width:24px;height:24px}
+.tab.on{color:var(--cyan)}
+.tab .badge{position:absolute;top:2px;left:calc(50% + 6px);min-width:17px;height:17px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;display:grid;place-items:center;padding:0 4px}
+section{animation:in .18s ease-out}
+@keyframes in{from{opacity:0;transform:translateY(4px)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (prefers-reduced-transparency:reduce){.tabs{background:var(--bg);backdrop-filter:none}}
 </style>
 </head>
 <body>
-<header><span class="dot" id="dot"></span><h1>EFB Wächter</h1><span class="sub" id="stand"></span></header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plane" viewBox="0 0 24 24"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.9 19.1a10 10 0 0 1 0-14.2M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M19.1 4.9a10 10 0 0 1 0 14.2"/><circle cx="12" cy="12" r="2"/></g></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></g></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></g></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 8v9H8"/></g></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></g></symbol>
+  <symbol id="i-walk" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 3v4M6 12l3-4 4 1 3 3 3 1M9 8l-1 5"/></g></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5L20 7"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6v12M15 6v12"/></g></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></g></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></g></symbol>
+</svg>
 
-<div id="setup" class="card hide">
-  <p style="margin:0 0 10px">Noch nicht mit dem PC gekoppelt.</p>
-  <p class="sub">Am PC: Symbol der EFB Bridge → Rechtsklick → <b>Handy koppeln</b> → QR-Code mit der Handy-Kamera scannen. Oder den Kanal hier einfügen:</p>
-  <div style="display:flex;gap:8px;margin-top:10px"><input id="topicIn" placeholder="efb-…" autocomplete="off" autocapitalize="off"><button class="btn" id="topicSave">Koppeln</button></div>
-</div>
+<!-- ===================== FLUG ===================== -->
+<section id="t-flug">
+  <div class="lt" id="fTitle">Flug</div>
+  <div class="pills" id="pills"></div>
 
-<div id="main" class="hide">
-  <div class="card" id="awayCard"></div>
-
-  <h3>PC und Sim</h3>
-  <div class="card rows" id="stat"></div>
-
-  <h3>Flugdaten <span id="fdT" style="text-transform:none;letter-spacing:0"></span></h3>
-  <div class="card" id="fd"><p class="sub">Lädt …</p></div>
-
-  <h3>Lotsen</h3>
-  <div class="card" id="atc"><p class="sub">Lädt …</p></div>
-
-  <div id="appOnly">
-    <h3>Alarme</h3>
-    <div class="card" id="alarms"></div>
-    <p class="msg">Wecker = klingelt im Vollbild über die Wecker-Lautstärke, bis du „Bin dran“ tippst. „Wecker, wenn weg“ = nur im Weg-Modus ein Wecker, sonst eine normale Nachricht.</p>
-    <div style="margin-top:10px"><button class="btn" id="testW">Wecker testen</button></div>
-
-    <h3>Einrichtung</h3>
-    <div class="card" id="fixes"></div>
+  <div id="setup" class="card hide">
+    <p style="margin-bottom:8px;font-weight:600">Noch nicht mit dem PC gekoppelt</p>
+    <p class="sub">Am PC: Symbol der EFB Bridge → Rechtsklick → <b>Handy koppeln</b> → QR-Code mit der Handy-Kamera scannen. Oder den Kanal hier einfügen:</p>
+    <div style="display:flex;gap:8px;margin-top:12px"><input id="topicIn" placeholder="efb-…" autocomplete="off" autocapitalize="off" aria-label="Kanal"><button class="btn-s" id="topicSave">Koppeln</button></div>
   </div>
 
-  <h3>Verlauf</h3>
-  <div class="card hist" id="hist"></div>
+  <div id="main" class="hide">
+    <div id="awayCard"></div>
 
-  <h3>Kopplung</h3>
-  <div class="card"><p class="sub mono" id="topicShow" style="word-break:break-all"></p><div style="margin-top:8px"><button class="btn" id="unpair">Anderen Kanal eingeben</button></div></div>
-</div>
+    <div class="sec"><span class="eyebrow">Jetzt</span><span id="fdSrc"></span></div>
+    <div class="card" id="fd"><p class="sub">Lädt …</p></div>
+
+    <div class="sec"><span class="eyebrow">Lotsen</span><span>VATSIM</span></div>
+    <div class="card atc" id="atc"><p class="sub">Lädt …</p></div>
+  </div>
+</section>
+
+<!-- ===================== ALARME ===================== -->
+<section id="t-alarme" class="hide">
+  <div class="lt">Alarme</div>
+  <div id="alarmBody"></div>
+</section>
+
+<!-- ===================== VERLAUF ===================== -->
+<section id="t-verlauf" class="hide">
+  <div class="lt">Verlauf</div>
+  <p class="note">Alle Meldungen vom PC, neueste oben.</p>
+  <div class="card list" id="hist" style="margin-top:14px"></div>
+</section>
+
+<nav class="tabs" aria-label="Bereiche">
+  <button class="tab on" data-tab="flug"><svg><use href="#i-plane"/></svg>Flug</button>
+  <button class="tab" data-tab="alarme"><svg><use href="#i-bell"/></svg>Alarme</button>
+  <button class="tab" data-tab="verlauf"><svg><use href="#i-list"/></svg>Verlauf<i class="badge hide" id="badge"></i></button>
+</nav>
 
 <script>
 {
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const APP=window.EFBApp||null;
-const KINDS=[['tod','Top of Descent'],['sector','Neuer Lotse voraus'],['warning','Master Warning'],['ap','Autopilot aus'],['away','Weg-Modus abgelaufen'],['caution','Master Caution'],['pause','Sim pausiert'],['test','Test vom PC'],['info','Infos (Bridge gestartet …)']];
+/* Alarmarten: Name, Symbol, Farbe, Gruppe */
+const KIND={tod:['Top of Descent','i-down','a','Flug'],sector:['Neuer Lotse voraus','i-radio','c','Flug'],away:['Weg-Modus abgelaufen','i-clock','n','Flug'],
+  warning:['Master Warning','i-warn','r','Cockpit'],ap:['Autopilot aus','i-plane','r','Cockpit'],caution:['Master Caution','i-warn','a','Cockpit'],pause:['Sim pausiert','i-pause','n','Cockpit'],
+  test:['Test vom PC','i-info','n','Sonstiges'],info:['Infos (Bridge gestartet …)','i-info','n','Sonstiges']};
+const SUBS={sector:'5 min vorher',away:'nach 25 min'};
 /* 2 = Wecker nur im Weg-Modus, sonst Nachricht (am PC hört man es ja selbst) */
-const MODES=['Aus','Nachricht','Wecker, wenn weg','Immer Wecker'];
+const MODES=[['Aus',''],['Nachricht','Banner und Ton'],['Wecker, wenn weg','sonst Nachricht'],['Immer Wecker','']];
 const NTFY='https://ntfy.sh';
-let S={topic:'',modes:{},history:[],status:null,connected:false,fsi:true,battery:true,notif:true};
+let S={topic:'',modes:{},history:[],status:null,connected:false,fsi:true,battery:true,notif:true,lan:false};
+let TAB=localStorage.getItem('efb.tab')||'flug',OPEN='';
 
 /* ---------- Zustand: aus der App oder (Browser) aus ntfy ---------- */
 function load(){
@@ -110,7 +216,7 @@ function load(){
   else{S.topic=decodeURIComponent(location.hash.slice(1))||localStorage.getItem('efb.topic')||''}
   render();
 }
-window.efbUpdate=load;      // ruft die App auf, wenn sich etwas ändert
+window.efbUpdate=load;
 let es=null;
 function browserListen(){
   if(APP||!S.topic||es)return;
@@ -126,51 +232,74 @@ function send(cmd){
 
 /* ---------- Anzeige ---------- */
 const hm=t=>new Date(t).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+const icon=(id,cls)=>`<span class="ic ${cls}"><svg><use href="#${id}"/></svg></span>`;
 function render(){
+  for(const t of['flug','alarme','verlauf']){$('#t-'+t).classList.toggle('hide',TAB!==t);document.querySelector(`[data-tab="${t}"]`).classList.toggle('on',TAB===t)}
   $('#setup').classList.toggle('hide',!!S.topic);
   $('#main').classList.toggle('hide',!S.topic);
-  $('#appOnly').classList.toggle('hide',!APP);
-  if(!S.topic)return;
-  const st=S.status||{};const pcOn=!!st.on;
-  $('#dot').className='dot '+(st.away?'warn':pcOn&&S.connected?'on':'');
-  $('#stand').textContent=st.rx?'Stand '+hm(st.rx):'';
-  // Weg-Modus
+  const st=S.status||{},pcOn=!!st.on&&S.connected!==false;
+  document.body.classList.toggle('away',!!st.away);
+  $('#fTitle').textContent=st.away?'Du bist weg':'Flug';
+  // Status-Pillen
+  const pill=(ok,txt,cls)=>`<span class="pill ${cls||(ok?'ok':'')}"><i></i>${txt}</span>`;
+  $('#pills').innerHTML=!S.topic?'':!S.connected?pill(false,'Verbindet …','warn'):
+    pill(pcOn,pcOn?'PC verbunden':'PC-Bridge aus')+(pcOn?pill(st.sim,st.sim?'Sim':'Sim wartet')+(st.sim?pill(st.fenix,st.fenix?'Fenix':'Fenix nicht geladen'):''):'')+(S.lan?pill(true,'WLAN live','ok live'):'');
+  // Weg-Modus oder „Ich bin weg“
   if(st.away){
-    const gone=Math.max(0,(Date.now()-st.awaySince)/60000),left=Math.max(0,(st.awayMin||25)-gone);
-    $('#awayCard').innerHTML=`<p class="away-t">${Math.floor(gone)} min weg</p><p class="sub">${left>0?`Alarm in ${Math.ceil(left)} min (VATSIM: max. 30 min)`:'Zeit abgelaufen – zurück an den PC!'}</p><div style="height:12px"></div><button class="big back" data-cmd="da">Bin zurück</button>`;
+    const gone=Math.max(0,(Date.now()-st.awaySince)/60000),tot=st.awayMin||25,left=tot-gone,frac=Math.max(0,Math.min(1,left/tot));
+    $('#awayCard').innerHTML=`<div class="ring${left<=0?' over':''}"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="#222C38" stroke-width="9"/><circle cx="60" cy="60" r="52" fill="none" stroke="${left<=0?'#FF5D5D':'#FFB547'}" stroke-width="9" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="${(326.7*(1-frac)).toFixed(1)}"/></svg>`+
+      `<div class="c"><b>${left>0?Math.ceil(left):'0'}</b><span>${left>0?'min bis zum Wecker':'Zeit abgelaufen'}</span></div></div>`+
+      `<p class="hint" style="margin:0 0 4px">${Math.floor(gone)} min weg · VATSIM erlaubt max. 30</p>`+
+      `<div class="sec"><span class="eyebrow">Was als Nächstes kommt</span></div><div class="card list" id="awayNext"><div class="it"><div class="tx"><span>Wird berechnet …</span></div></div></div>`+
+      `<div style="height:14px"></div><button class="cta back" data-cmd="da"><svg><use href="#i-check"/></svg>Bin zurück</button>`;
+    window.efbAwayNext&&window.efbAwayNext();
   }else{
-    $('#awayCard').innerHTML=`<p class="sub" style="margin-bottom:10px">${pcOn?'Du bist am PC.':'PC-Bridge ist aus – Weg-Modus geht erst, wenn sie läuft.'}</p><button class="big go" data-cmd="weg" ${pcOn?'':'disabled style="opacity:.4"'}>Ich bin weg</button>`;
+    $('#awayCard').innerHTML=`<div class="card"><button class="cta go" data-cmd="weg" ${pcOn?'':'disabled'}><svg><use href="#i-walk"/></svg>Ich bin weg</button>`+
+      `<p class="hint">${pcOn?`Wecker nach ${st.awayMin||25} min · VATSIM erlaubt max. 30`:'Geht, sobald die PC-Bridge läuft.'}</p></div>`;
   }
-  // Status
-  const yn=(b,y,n)=>`<span class="${b?'ok':'no'}">${b?y:n}</span>`;
-  $('#stat').innerHTML=`<div><b>Verbindung</b>${yn(S.connected,'verbunden','getrennt – verbindet …')}</div>`+
-    (APP?`<div><b>WLAN direkt</b>${S.lan?'<span class="ok">verbunden · live</span>':'<span class="off">nicht im Heim-WLAN – über Internet</span>'}</div>`:'')+
-    `<div><b>PC-Bridge</b>${yn(pcOn,'läuft','aus')}</div>`+
-    (pcOn?`<div><b>Simulator</b>${yn(st.sim,'verbunden','wartet')}</div><div><b>Fenix</b>${yn(st.fenix,'wird überwacht','nicht geladen')}</div>`:'');
-  // Alarme
-  if(APP){
-    $('#alarms').innerHTML=KINDS.map(([k,n])=>{const m=S.modes[k]??0;
-      return`<div class="al"><span>${esc(n)}</span><div class="seg">${MODES.map((t,i)=>`<button data-k="${k}" data-m="${i}" class="${i===m?'sel'+(i>=2?' w':''):''}">${t}</button>`).join('')}</div></div>`}).join('');
-    const fx=[[S.notif,'Benachrichtigungen erlaubt','notif'],[S.fsi,'Vollbild-Wecker erlaubt','fsi'],[S.battery,'Akku-Optimierung aus (App läuft im Hintergrund)','battery']];
-    $('#fixes').innerHTML=fx.map(([ok,t,a])=>`<div class="fix"><span>${t}</span>${ok?'<span class="ok" style="flex:none">✓</span>':`<button class="btn" data-fix="${a}">Erlauben</button>`}</div>`).join('');
-  }
-  // Verlauf
-  const h=(S.history||[]).slice(-25).reverse();
-  $('#hist').innerHTML=h.length?h.map(x=>`<div><i>${hm(x.t)}</i>${esc(x.title)}${x.mode===2?' <span class="no">· Wecker</span>':''}</div>`).join(''):'<span class="sub">Noch keine Alarme.</span>';
-  $('#topicShow').textContent=S.topic;
+  renderAlarme();renderVerlauf();
 }
-setInterval(()=>{if(S.status&&S.status.away)render()},20000);
+function renderAlarme(){
+  if(!APP){$('#alarmBody').innerHTML='<p class="note" style="margin-top:12px">Alarme einstellen geht in der App „EFB Wächter“ auf dem Handy.</p>';return}
+  let h='<p class="note">Am PC bekommst du eine Nachricht, im Weg-Modus klingelt der Wecker. Pro Alarm einstellbar.</p>';
+  for(const g of['Flug','Cockpit','Sonstiges']){
+    h+=`<div class="sec"><span class="eyebrow">${g}</span></div><div class="card list">`;
+    for(const[k,v]of Object.entries(KIND)){if(v[3]!==g)continue;const m=S.modes[k]??0,open=OPEN===k;
+      h+=`<button class="it${open?' open':''}" data-open="${k}" aria-expanded="${open}">${icon(v[1],v[2])}<div class="tx"><b>${esc(v[0])}</b>${SUBS[k]?`<span>${SUBS[k]}</span>`:''}</div><span class="v${m>=2?' w':''}">${MODES[m][0]}<svg><use href="#i-chev"/></svg></span></button>`;
+      if(open)h+=`<div class="pick" role="radiogroup">${MODES.map(([t,d],i)=>`<button class="opt${i===m?' on':''}" role="radio" aria-checked="${i===m}" data-k="${k}" data-m="${i}"><span>${t}${d?`<em>${d}</em>`:''}</span>${i===m?'<svg><use href="#i-check"/></svg>':''}</button>`).join('')}</div>`;
+    }
+    h+='</div>';
+  }
+  h+='<div style="height:12px"></div><button class="ghost" id="testW"><svg width="18" height="18"><use href="#i-bell"/></svg>Wecker testen</button>';
+  const fx=[[S.notif,'Benachrichtigungen','notif'],[S.fsi,'Vollbild-Wecker','fsi'],[S.battery,'Läuft im Hintergrund (Akku-Optimierung aus)','battery']];
+  h+=`<div class="sec"><span class="eyebrow">Einrichtung</span></div><div class="card list">`+fx.map(([ok,t,a])=>`<div class="it">${icon(ok?'i-check':'i-warn',ok?'g':'a')}<div class="tx"><b>${t}</b><span>${ok?'erlaubt':'noch nicht erlaubt'}</span></div>${ok?'':`<button class="btn-s" data-fix="${a}">Erlauben</button>`}</div>`).join('')+`</div>`;
+  h+=`<div class="sec"><span class="eyebrow">Kopplung</span></div><div class="card list"><div class="it">${icon('i-link','c')}<div class="tx"><b>PC-Kanal</b><span class="num" style="word-break:break-all">${esc(S.topic)}</span></div></div></div>`+
+     `<div style="height:10px"></div><button class="ghost" id="unpair" style="color:var(--t2)">Anderen Kanal eingeben</button>`;
+  $('#alarmBody').innerHTML=h;
+}
+function renderVerlauf(){
+  const h=(S.history||[]).slice(-40).reverse();
+  $('#hist').innerHTML=h.length?h.map(x=>{const v=KIND[x.kind]||KIND.info;
+    return`<div class="it">${icon(v[1],v[2])}<div class="tx"><b>${esc(x.title)}</b><span>${x.mode===2?'als Wecker':x.mode===1?'als Nachricht':'nur im Verlauf'}</span></div><span class="tm">${hm(x.t)}</span></div>`}).join('')
+    :'<div class="it"><div class="tx"><span>Noch keine Meldungen.</span></div></div>';
+  const seen=+localStorage.getItem('efb.seen')||0,neu=(S.history||[]).filter(x=>x.t>seen&&x.kind!=='info').length;
+  const b=$('#badge');b.textContent=neu>9?'9+':neu;b.classList.toggle('hide',!neu||TAB==='verlauf');
+  if(TAB==='verlauf')localStorage.setItem('efb.seen',Date.now());
+}
+setInterval(()=>{if(S.status&&S.status.away)render()},15000);
 
 /* ---------- Bedienung ---------- */
 document.addEventListener('click',e=>{
   let b;
-  if(b=e.target.closest('[data-cmd]')){send(b.dataset.cmd);if(S.status){S.status.away=b.dataset.cmd==='weg';S.status.awaySince=Date.now()}render();return}
-  if(b=e.target.closest('[data-k]')){APP&&APP.setMode(b.dataset.k,+b.dataset.m);load();return}
+  if(b=e.target.closest('[data-tab]')){TAB=b.dataset.tab;localStorage.setItem('efb.tab',TAB);OPEN='';render();window.scrollTo(0,0);return}
+  if(b=e.target.closest('[data-cmd]')){if(b.disabled)return;send(b.dataset.cmd);S.status=S.status||{};S.status.away=b.dataset.cmd==='weg';S.status.awaySince=Date.now();render();window.scrollTo(0,0);return}
+  if(b=e.target.closest('[data-open]')){OPEN=OPEN===b.dataset.open?'':b.dataset.open;renderAlarme();return}
+  if(b=e.target.closest('[data-k]')){APP&&APP.setMode(b.dataset.k,+b.dataset.m);S.modes[b.dataset.k]=+b.dataset.m;OPEN='';renderAlarme();return}
   if(b=e.target.closest('[data-fix]')){const a=b.dataset.fix;APP&&(a==='fsi'?APP.openFsi():a==='battery'?APP.openBattery():APP.openNotif());return}
   if(e.target.closest('#testW')){APP&&APP.testAlarm('test');return}
   if(e.target.closest('#topicSave')){const t=$('#topicIn').value.trim();if(!/^efb-[a-z0-9]{8,}$/i.test(t)){alert('Das sieht nicht wie ein Kanal aus (efb-…).');return}
-    if(APP)APP.setTopic(t);else{location.hash=t;S.topic=t;browserListen()}load();return}
-  if(e.target.closest('#unpair')){if(APP)APP.setTopic('');else{location.hash='';localStorage.removeItem('efb.topic');S.topic=''}load();return}
+    if(APP)APP.setTopic(t);else{location.hash=t;S.topic=t;browserListen()}TAB='flug';load();return}
+  if(e.target.closest('#unpair')){if(APP)APP.setTopic('');else{location.hash='';localStorage.removeItem('efb.topic');S.topic=''}TAB='flug';load();return}
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
 window.efbStatus=()=>S.status;
@@ -281,62 +410,76 @@ function airport(icao){
   return{icao,list:l,atis:at?(at.atis_code||'?'):''};
 }
 
-/* Anzeige */
+/* Anzeige: Instrumente, TOD/ETA, Strecke, Lotsen-Zeitleiste; im Weg-Modus „Was als Nächstes kommt“ */
+let NEXT={sector:null,tod:null};
+const clock=min=>{const d=new Date(Date.now()+min*60000);return`${d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} · ${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}z`};
+const inMin=m=>m<1?'jetzt':m<90?`in ${Math.round(m)} min`:`in ${Math.floor(m/60)} h ${String(Math.round(m%60)).padStart(2,'0')}`;
 function render(){
   const fd=$('#fd'),atc=$('#atc');if(!fd)return;
   const P=FD.plan,u=sbName();
-  if(!u){fd.innerHTML=`<p class="sub" style="margin-bottom:8px">SimBrief-Name fehlt (kommt sonst von der PC-Bridge).</p><div style="display:flex;gap:8px"><input id="sbIn" placeholder="SimBrief-Benutzername" autocapitalize="off"><button class="btn" id="sbSave">OK</button></div>`;atc.innerHTML='<p class="sub">–</p>';return}
+  if(!u){$('#fdSrc').textContent='';fd.innerHTML=`<p class="sub" style="margin-bottom:10px">SimBrief-Name fehlt (kommt sonst von der PC-Bridge).</p><div style="display:flex;gap:8px"><input id="sbIn" placeholder="SimBrief-Benutzername" autocapitalize="off" aria-label="SimBrief-Benutzername"><button class="btn-s" id="sbSave">OK</button></div>`;atc.innerHTML='<p class="sub">–</p>';return}
   if(!P){fd.innerHTML=`<p class="sub">${esc(FD.planErr||'Lade SimBrief-Plan …')}</p>`;return}
   const L=liveData();
-  CUR=L?{p:{latitude:L.lat,longitude:L.lon,altitude:L.alt,groundspeed:L.gs},vs:L.vs,src:'live vom PC'}:{p:FD.p,vs:FD.vs,src:FD.p?'VATSIM, ~15 s':''};
-  $('#fdT').textContent=`· ${P.cs} ${P.dep} → ${P.arr}${CUR.src?' · '+CUR.src:''}`;
-  const p=CUR.p;
-  if(!p){fd.innerHTML=`<p class="sub">${esc(P.cs)} ist gerade nicht mit VATSIM verbunden${window.EFBApp?' und kein Sim über WLAN':''}.${FD.err?' (VATSIM nicht erreichbar)':''}</p>`}
+  CUR=L?{p:{latitude:L.lat,longitude:L.lon,altitude:L.alt,groundspeed:L.gs},vs:L.vs,src:'live vom PC'}:{p:FD.p,vs:FD.vs,src:FD.p?'VATSIM · ~15 s':''};
+  $('#fdSrc').textContent=CUR.src;
+  const p=CUR.p;NEXT={sector:null,tod:null};
+  const head=`<div class="flt"><span class="cs">${esc(P.cs)}</span><span class="rt">${esc(P.dep)} → ${esc(P.arr)}</span>${p?`<span class="chip">${esc(phase())}</span>`:''}</div>`;
+  if(!p){fd.innerHTML=head+`<p class="sub">Gerade nicht mit VATSIM verbunden${window.EFBApp?' und kein Sim im WLAN':''}.${FD.err?' VATSIM ist nicht erreichbar.':''}</p>`}
   else{
     const me=[p.latitude,p.longitude],vs=CUR.vs,gs=p.groundspeed,ph=phase();
-    /* Rest entlang der Route: zum nächsten Wegpunkt + aufsummierte Abschnitte bis zum Ziel bzw. TOD-Punkt.
-       (Luftlinie täuscht: der TOD kann geografisch nah am Platz liegen, wenn die STAR eine Schleife fliegt.) */
+    /* Rest entlang der Route: zum nächsten Wegpunkt + aufsummierte Abschnitte bis Ziel bzw. TOD-Punkt
+       (Luftlinie täuscht: der TOD kann geografisch nah am Platz liegen, wenn die STAR eine Schleife fliegt) */
     const W=P.wps||[];let dA=nm(me,P.arrPos),todFromArr=null;
     if(W.length&&P.total){
       let bi=0,bd=1e9;W.forEach((w,i)=>{const d=nm(me,w);if(d<bd){bd=d;bi=i}});
       let nx=bi;if(bi<W.length-1&&nm(me,W[bi+1])<nm(W[bi],W[bi+1]))nx=bi+1;
-      const base=nm(me,W[nx])-W[nx][3];                     // Rest bis Punkt X = cum[X] + base
-      dA=P.total+base;
+      dA=P.total+nm(me,W[nx])-W[nx][3];
       const todCum=P.todCum!=null?P.todCum:P.crz?P.total-Math.max(0,(P.crz-P.arrElev)*3/1000):null;
       if(todCum!=null)todFromArr=P.total-todCum;
     }else if(P.crz)todFromArr=Math.max(0,(P.crz-P.arrElev)*3/1000);
-    /* groß: „in X min“ (sofort lesbar), klein darunter: Uhrzeit lokal + UTC und Entfernung */
-    const clock=min=>{const d=new Date(Date.now()+min*60000);return`${d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} Uhr (${String(d.getUTCHours()).padStart(2,'0')}${String(d.getUTCMinutes()).padStart(2,'0')}z)`};
-    const inMin=m=>m<1?'jetzt':m<90?`in ${Math.round(m)} min`:`in ${Math.floor(m/60)} h ${String(Math.round(m%60)).padStart(2,'0')}`;
-    let eta='–',etaSub='',tod='–',todSub='';
+    let eta='–',etaSub='',tod='–',todSub='',todPassed=false;
     if(dA!=null&&gs>80){const m=dA/gs*60;eta=inMin(m);etaSub=`${clock(m)} · ${Math.round(dA)} NM`}
-    else if(dA!=null)etaSub=`${Math.round(dA)} NM bis ${esc(P.arr)}`;
+    else if(dA!=null)etaSub=`${Math.round(dA)} NM`;
     if(todFromArr!=null&&dA!=null){
       const dT=dA-todFromArr;
-      if(dT<=1||/Sinkflug|Anflug|Endanflug|Landung|rollt nach|Stand/.test(ph)&&p.altitude<(P.crz||99999)-1500){tod='passiert';todSub='im Sinkflug'}
-      else if(gs>80){const m=dT/gs*60;tod=inMin(m);todSub=`${clock(m)} · ${Math.round(dT)} NM`}
+      if(dT<=1||/Sinkflug|Anflug|Endanflug|Landung|rollt nach|Stand/.test(ph)&&p.altitude<(P.crz||99999)-1500){tod='passiert';todSub='im Sinkflug';todPassed=true}
+      else if(gs>80){const m=dT/gs*60;tod=inMin(m);todSub=`${clock(m)} · ${Math.round(dT)} NM`;NEXT.tod={m}}
       else todSub=`${Math.round(todFromArr)} NM vor ${esc(P.arr)}`;
     }
-    fd.innerHTML=`<div class="fdg"><div><b>Höhe</b><span>${alt(p.altitude,gs)}</span></div><div><b>Geschwindigkeit</b><span>${gs} kt</span></div>`+
-      `<div><b>Steigen / Sinken</b><span class="s">${vs==null?'–':(vs>0?'+':'')+vs+' ft/min'}</span></div><div><b>Phase</b><span class="s">${esc(ph)}</span></div>`+
-      `<div class="tm"><b>TOD</b><span class="s tod">${tod}</span><i>${todSub}</i></div><div class="tm"><b>ETA ${esc(P.arr)}</b><span class="s">${eta}</span><i>${etaSub}</i></div></div>`;
+    const vsTxt=vs==null?'–':(vs>0?'+':'')+vs;
+    const tot=P.total||null,frac=tot&&dA!=null?Math.max(0,Math.min(1,1-dA/tot)):null,todF=tot&&todFromArr!=null?Math.max(0,Math.min(1,1-todFromArr/tot)):null;
+    fd.innerHTML=head+
+      `<div class="inst"><div><b>HÖHE</b><span>${alt(p.altitude,gs)}</span></div><div><b>GS</b><span>${gs}</span><small>kt</small></div><div><b>V/S</b><span class="n">${vsTxt}</span><small>ft/min</small></div></div>`+
+      `<div class="times"><div class="tile"><b>TOP OF DESCENT</b><div class="big${todPassed?'':' amber'}">${tod}</div><div class="sm">${todSub}</div></div>`+
+      `<div class="tile"><b>ETA ${esc(P.arr)}</b><div class="big">${eta}</div><div class="sm">${etaSub}</div></div></div>`+
+      (frac!=null?`<div class="track"><div class="line"></div><div class="done" style="width:${(frac*100).toFixed(1)}%"></div>${todF!=null?`<div class="tod" style="left:${(todF*100).toFixed(1)}%"></div><span class="lbl" style="left:${(todF*100).toFixed(1)}%">TOD</span>`:''}`+
+        `<svg class="me" style="left:${(frac*100).toFixed(1)}%"><use href="#i-plane"/></svg><span class="lbl l">${esc(P.dep)}</span><span class="lbl r">${esc(P.arr)}</span></div>`:'');
   }
   // Lotsen
-  if(SEC.st==='load'||SEC.st===''){atc.innerHTML='<p class="sub">Sektordaten werden geladen …</p>';return}
+  if(SEC.st==='load'||SEC.st===''){atc.innerHTML='<p class="sub">Sektordaten werden geladen …</p>';window.efbAwayNext();return}
   const W=P.wps||[];let pt=null,start=0;
   if(p&&p.groundspeed>=40){pt=[p.latitude,p.longitude];let bi=-1,bd=1e9;W.forEach((w,i)=>{const d=nm(pt,w);if(d<bd){bd=d;bi=i}});start=bi+1}
   else pt=(p?[p.latitude,p.longitude]:null)||P.depPos;
   const cur=covers(pt),curCs=new Set(cur.map(x=>x.cs));let next=null,dist=0,prevPt=pt;
-  for(let k=start;k<W.length;k++){dist+=nm(prevPt,W[k])||0;prevPt=W[k];const cv=covers(W[k]);if(cv.length&&!cv.some(x=>curCs.has(x.cs))){next={...cv[0],alt:cv.slice(1),at:W[k][2],dist};break}}
-  const row=(cls,lbl,x,extra)=>`<div class="st ${cls}"><small>${lbl}</small><span class="f">${esc(x.freq)}</span><div class="n">${esc(x.d)}</div><div class="x">${esc(x.cs)}${extra||''}</div></div>`;
+  for(let k=start;k<W.length;k++){dist+=nm(prevPt,W[k])||0;prevPt=W[k];const cv=covers(W[k]);if(cv.length&&!cv.some(x=>curCs.has(x.cs))){next={...cv[0],at:W[k][2],dist};break}}
+  if(next&&p&&p.groundspeed>80)NEXT.sector={d:next.d,freq:next.freq,m:next.dist/p.groundspeed*60};
+  const stn=(cls,lbl,x)=>`<div class="st ${cls}"><small>${lbl}</small><div class="n"><span>${esc(x.d)}</span><span class="f">${esc(x.freq)}</span></div><div class="x">${esc(x.cs)}</div></div>`;
   let h='';
-  if(cur.length)h+=cur.map((x,i)=>row('',i?'Auch zuständig':'Jetzt',x)).join('');
-  else h+=`<div class="st"><small>Jetzt</small><div class="n">Kein Center online</div><div class="x">Unicom 122.800</div></div>`;
-  if(next)h+=row('nx','Als Nächstes',next,` · ${next.dist>0?'in '+Math.round(next.dist)+' NM ':''}ab ${esc(next.at)}`);
+  if(cur.length)h+=cur.map((x,i)=>stn('now',i?'Auch zuständig':'Jetzt',x)).join('');
+  else h+=`<div class="st now"><small>Jetzt</small><div class="n"><span>Kein Center online</span><span class="f" style="color:var(--t2)">122.800</span></div><div class="x">Unicom</div></div>`;
+  if(next){const when=NEXT.sector?inMin(NEXT.sector.m)+' · ':'';h+=stn('next',`${when}${next.dist>0?'in '+Math.round(next.dist)+' NM · ':''}ab ${esc(next.at)}`,next)}
   const ap=airport(P.arr);
-  if(ap){h+=`<div class="st"><small>Ziel ${esc(ap.icao)}${ap.atis?' · ATIS '+esc(ap.atis):''}</small>${ap.list.length?ap.list.map(c=>`<div class="x" style="font-size:14px;color:var(--ink)">${ROLE[c.facility]||''} <span class="mono" style="color:var(--g)">${esc(c.frequency)}</span> <span style="color:var(--mut)">${esc(c.callsign)}</span></div>`).join(''):'<div class="x">Niemand online – Unicom</div>'}</div>`}
+  if(ap)h+=`<div class="st"><small>Ziel ${esc(ap.icao)}${ap.atis?' · ATIS '+esc(ap.atis):''}</small>${ap.list.length?`<div class="dest">${ap.list.map(c=>`<span class="chip">${({2:'DEL',3:'GND',4:'TWR',5:'APP'})[c.facility]||''} <em>${esc(c.frequency)}</em></span>`).join('')}</div>`:'<div class="x">Niemand online – Unicom 122.800</div>'}</div>`;
   atc.innerHTML=h;
+  window.efbAwayNext();
 }
+/* Weg-Modus: was kommt als Nächstes (neuer Lotse, TOD) */
+window.efbAwayNext=()=>{
+  const el=$('#awayNext');if(!el)return;const it=[];
+  if(NEXT.sector)it.push([NEXT.sector.m,`<div class="it"><span class="ic c"><svg><use href="#i-radio"/></svg></span><div class="tx"><b>Neuer Lotse</b><span>${esc(NEXT.sector.d)} · <span class="num">${esc(NEXT.sector.freq)}</span></span></div><span class="tm">${inMin(NEXT.sector.m)}</span></div>`]);
+  if(NEXT.tod)it.push([NEXT.tod.m,`<div class="it"><span class="ic a"><svg><use href="#i-down"/></svg></span><div class="tx"><b>Top of Descent</b><span>Sinkflug anfragen</span></div><span class="tm">${inMin(NEXT.tod.m)}</span></div>`]);
+  el.innerHTML=it.length?it.sort((a,b)=>a[0]-b[0]).map(x=>x[1]).join(''):'<div class="it"><div class="tx"><span>Gerade steht nichts an.</span></div></div>';
+};
 document.addEventListener('click',e=>{
   if(e.target.closest('#sbSave')){const v=$('#sbIn').value.trim();if(v){localStorage.setItem('efb.sb',v);loadPlan().then(pull)}}
 });
