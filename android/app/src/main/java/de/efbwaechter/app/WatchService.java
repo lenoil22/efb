@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo;
 import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
+import android.net.wifi.WifiManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -26,7 +27,10 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -83,6 +87,8 @@ public class WatchService extends Service {
             running = true;
             worker = new Thread(this::loop, "ntfy");
             worker.start();
+            lanWorker = new Thread(this::lanLoop, "wlan");
+            lanWorker.start();
         }
         return START_STICKY;
     }
@@ -120,7 +126,108 @@ public class WatchService extends Service {
             if (running) { setConnected(false, "Verbindung getrennt – neuer Versuch …"); sleep(5000); }
         }
     }
-    private void dropConnection() { HttpURLConnection c = con; if (c != null) try { c.disconnect(); } catch (Exception ignored) { } }
+    private void dropConnection() {
+        HttpURLConnection c = con; if (c != null) try { c.disconnect(); } catch (Exception ignored) { }
+        HttpURLConnection l = lanCon; if (l != null) try { l.disconnect(); } catch (Exception ignored) { }
+    }
+
+    /* ---------- WLAN direkt: PC per UDP-Rundruf finden, Server-Sent Events empfangen ---------- */
+    static volatile boolean lanConnected;
+    static volatile String live = "";                 // letzte Live-Daten aus dem Sim (JSON)
+    static volatile Runnable liveListener;
+    private Thread lanWorker;
+    private volatile HttpURLConnection lanCon;
+    private WifiManager.MulticastLock mlock;
+
+    private void lanLoop() {
+        int fails = 0;
+        while (running) {
+            String topic = Prefs.topic(this);
+            if (topic.isEmpty()) { sleep(3000); continue; }
+            String hp = discover(sha12(topic));
+            if (hp != null) {
+                try {
+                    HttpURLConnection c = (HttpURLConnection) new URL("http://" + hp + "/events?k=" + enc(topic)).openConnection();
+                    c.setConnectTimeout(4000);
+                    c.setReadTimeout(45000);                     // Bridge schickt alle 20 s ein Lebenszeichen
+                    lanCon = c;
+                    BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8));
+                    setLan(true); fails = 0;
+                    String ev = "message", line; StringBuilder data = new StringBuilder();
+                    while (running && (line = r.readLine()) != null) {
+                        if (line.isEmpty()) { if (data.length() > 0) lanEvent(ev, data.toString()); ev = "message"; data.setLength(0); continue; }
+                        if (line.startsWith(":")) continue;
+                        if (line.startsWith("event:")) ev = line.substring(6).trim();
+                        else if (line.startsWith("data:")) data.append(line.substring(5).trim());
+                        if (!topic.equals(Prefs.topic(this))) break;
+                    }
+                } catch (Exception ignored) {
+                } finally { HttpURLConnection c = lanCon; lanCon = null; if (c != null) c.disconnect(); }
+            }
+            setLan(false);
+            fails++;
+            sleep(Math.min(30000, 3000L * fails));          // nicht im Heim-WLAN → seltener suchen (Akku)
+        }
+    }
+
+    /** Wartet bis 6 s auf den Rundruf der eigenen PC-Bridge; sonst letzte bekannte Adresse. */
+    private String discover(String id) {
+        DatagramSocket s = null;
+        try {
+            if (mlock == null) {
+                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                mlock = wm.createMulticastLock("efb"); mlock.setReferenceCounted(false);
+            }
+            mlock.acquire();
+            s = new DatagramSocket(null);
+            s.setReuseAddress(true); s.setBroadcast(true);
+            s.bind(new InetSocketAddress(8791));
+            s.setSoTimeout(6000);
+            byte[] b = new byte[512];
+            long end = System.currentTimeMillis() + 6000;
+            while (System.currentTimeMillis() < end) {
+                DatagramPacket p = new DatagramPacket(b, b.length);
+                s.receive(p);
+                JSONObject o = new JSONObject(new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8));
+                if (id.equals(o.optString("id"))) {
+                    String hp = p.getAddress().getHostAddress() + ":" + o.optInt("port", 8790);
+                    Prefs.p(this).edit().putString("lanHost", hp).apply();
+                    return hp;
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (s != null) s.close();
+            if (mlock != null && mlock.isHeld()) mlock.release();
+        }
+        String last = Prefs.p(this).getString("lanHost", "");
+        return last.isEmpty() ? null : last;
+    }
+
+    private void lanEvent(String ev, String data) {
+        try {
+            if ("alarm".equals(ev)) {
+                JSONObject o = new JSONObject(data);
+                alarm(o.optString("aid"), o.optLong("t", System.currentTimeMillis()), o.optString("kind", "info"), o.optString("title", "EFB"), o.optString("message", ""));
+            } else if ("status".equals(ev)) {
+                JSONObject s = new JSONObject(data);
+                if (!s.has("rx")) s.put("rx", System.currentTimeMillis());
+                Prefs.status(this, s.toString()); ui();
+            } else if ("live".equals(ev)) {
+                live = data;
+                Runnable r = liveListener; if (r != null) main.post(r);
+            }
+        } catch (Exception ignored) { }
+    }
+    private void setLan(boolean c) { boolean ch = lanConnected != c; lanConnected = c; if (!c) live = ""; if (ch) ui(); }
+
+    static String sha12(String s) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+            StringBuilder h = new StringBuilder(); for (byte x : d) h.append(String.format("%02x", x));
+            return h.substring(0, 12);
+        } catch (Exception e) { return ""; }
+    }
 
     private void handle(JSONObject m) throws Exception {
         if (!"message".equals(m.optString("event"))) return;
@@ -133,14 +240,22 @@ public class WatchService extends Service {
             Prefs.status(this, s.toString());
             ui(); return;
         }
-        String kind = "info";
+        String kind = "info", aid = "";
         JSONArray tags = m.optJSONArray("tags");
-        if (tags != null) for (int i = 0; i < tags.length(); i++) { String g = tags.optString(i); if (g.startsWith("efb-")) kind = g.substring(4); }
-        String title = m.optString("title", "EFB"), msg = m.optString("message", "");
+        if (tags != null) for (int i = 0; i < tags.length(); i++) {
+            String g = tags.optString(i);
+            if (g.startsWith("efb-")) kind = g.substring(4);
+            if (g.startsWith("aid-")) aid = g.substring(4);
+        }
+        alarm(aid.isEmpty() ? id : aid, t, kind, m.optString("title", "EFB"), m.optString("message", ""));
+    }
+
+    /** Ein Alarm – egal ob über ntfy oder WLAN direkt. Gleiche ID (aid) → nur einmal. */
+    private synchronized void alarm(String hid, long t, String kind, String title, String msg) {
         int set = Prefs.mode(this, kind);
         // 2 = Wecker nur, wenn du weg bist (Weg-Modus der PC-Bridge) – am PC reicht eine Nachricht
         int mode = set == 3 ? 2 : set == 2 ? (Prefs.away(this) ? 2 : 1) : set;
-        boolean fresh = Prefs.addHistory(this, id, t, kind, title, msg, mode);
+        boolean fresh = Prefs.addHistory(this, hid, t, kind, title, msg, mode);
         ui();
         if (!fresh || System.currentTimeMillis() - t > 120000) return;   // alte Meldungen beim Wiederverbinden: nur in den Verlauf
         final String k = kind;
@@ -216,6 +331,16 @@ public class WatchService extends Service {
         String topic = Prefs.topic(c);
         if (topic.isEmpty()) return;
         new Thread(() -> {
+            if (lanConnected) {                                   // zu Hause: direkt an den PC
+                try {
+                    String hp = Prefs.p(c).getString("lanHost", "");
+                    HttpURLConnection h = (HttpURLConnection) new URL("http://" + hp + "/cmd?k=" + enc(topic)).openConnection();
+                    h.setRequestMethod("POST"); h.setDoOutput(true); h.setConnectTimeout(3000); h.setReadTimeout(3000);
+                    try (OutputStream o = h.getOutputStream()) { o.write(cmd.getBytes(StandardCharsets.UTF_8)); }
+                    int code = h.getResponseCode(); h.disconnect();
+                    if (code == 200) return;
+                } catch (Exception ignored) { }                   // sonst über ntfy
+            }
             try {
                 HttpURLConnection h = (HttpURLConnection) new URL(Prefs.SERVER + "/" + enc(topic + "-cmd")).openConnection();
                 h.setRequestMethod("POST"); h.setDoOutput(true); h.setConnectTimeout(10000); h.setReadTimeout(10000);

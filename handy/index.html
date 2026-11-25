@@ -144,6 +144,7 @@ function render(){
   // Status
   const yn=(b,y,n)=>`<span class="${b?'ok':'no'}">${b?y:n}</span>`;
   $('#stat').innerHTML=`<div><b>Verbindung</b>${yn(S.connected,'verbunden','getrennt – verbindet …')}</div>`+
+    (APP?`<div><b>WLAN direkt</b>${S.lan?'<span class="ok">verbunden · live</span>':'<span class="off">nicht im Heim-WLAN – über Internet</span>'}</div>`:'')+
     `<div><b>PC-Bridge</b>${yn(pcOn,'läuft','aus')}</div>`+
     (pcOn?`<div><b>Simulator</b>${yn(st.sim,'verbunden','wartet')}</div><div><b>Fenix</b>${yn(st.fenix,'wird überwacht','nicht geladen')}</div>`:'');
   // Alarme
@@ -222,9 +223,15 @@ async function pull(){
 }
 const nm=(a,b)=>{if(!a||!b)return null;const R=3440.065,r=x=>x*Math.PI/180,dl=r(b[0]-a[0]),dn=r(b[1]-a[1]);const h=Math.sin(dl/2)**2+Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
 const alt=(a,gs)=>gs<40?'Boden':a>=(FD.plan?.ta||5000)?'FL'+String(Math.round(a/100)).padStart(3,'0'):Math.round(a/100)*100+' ft';
+/* Live-Daten direkt aus dem Sim (App + PC im selben WLAN), sonst null → VATSIM */
+function liveData(){
+  try{if(!window.EFBApp||!EFBApp.live)return null;const s=EFBApp.live();if(!s)return null;const o=JSON.parse(s);return Date.now()-o.t<5000?o:null}catch(e){return null}
+}
+window.efbLive=()=>render();
+let CUR={p:null,vs:null,src:''};
 function phase(){
-  const p=FD.p,P=FD.plan;if(!p)return'';const me=[p.latitude,p.longitude],dD=nm(me,P.depPos),dA=nm(me,P.arrPos);
-  const atArr=dA!=null&&(dD==null||dA<dD),agl=p.altitude-(atArr?P.arrElev:P.depElev),vs=FD.vs??0;
+  const p=CUR.p,P=FD.plan;if(!p)return'';const me=[p.latitude,p.longitude],dD=nm(me,P.depPos),dA=nm(me,P.arrPos);
+  const atArr=dA!=null&&(dD==null||dA<dD),agl=p.altitude-(atArr?P.arrElev:P.depElev),vs=CUR.vs??0;
   if(p.groundspeed<40)return atArr?(p.groundspeed<3?'am Stand':'rollt nach der Landung'):(p.groundspeed<3?'am Gate':'rollt');
   if(!atArr&&dD<8&&agl<1500)return'Start';if(atArr&&dA<10&&agl<3000)return'Endanflug';if(atArr&&dA<25&&agl<6000)return'Anflug';
   if(vs>300)return'Steigflug';if(vs<-300)return'Sinkflug';return p.altitude>=10000?'Reiseflug':atArr?'Sinkflug':'Steigflug';
@@ -280,11 +287,13 @@ function render(){
   const P=FD.plan,u=sbName();
   if(!u){fd.innerHTML=`<p class="sub" style="margin-bottom:8px">SimBrief-Name fehlt (kommt sonst von der PC-Bridge).</p><div style="display:flex;gap:8px"><input id="sbIn" placeholder="SimBrief-Benutzername" autocapitalize="off"><button class="btn" id="sbSave">OK</button></div>`;atc.innerHTML='<p class="sub">–</p>';return}
   if(!P){fd.innerHTML=`<p class="sub">${esc(FD.planErr||'Lade SimBrief-Plan …')}</p>`;return}
-  $('#fdT').textContent=`· ${P.cs} ${P.dep} → ${P.arr}`;
-  const p=FD.p;
-  if(!p){fd.innerHTML=`<p class="sub">${esc(P.cs)} ist gerade nicht mit VATSIM verbunden.${FD.err?' (VATSIM nicht erreichbar)':''}</p>`}
+  const L=liveData();
+  CUR=L?{p:{latitude:L.lat,longitude:L.lon,altitude:L.alt,groundspeed:L.gs},vs:L.vs,src:'live vom PC'}:{p:FD.p,vs:FD.vs,src:FD.p?'VATSIM, ~15 s':''};
+  $('#fdT').textContent=`· ${P.cs} ${P.dep} → ${P.arr}${CUR.src?' · '+CUR.src:''}`;
+  const p=CUR.p;
+  if(!p){fd.innerHTML=`<p class="sub">${esc(P.cs)} ist gerade nicht mit VATSIM verbunden${window.EFBApp?' und kein Sim über WLAN':''}.${FD.err?' (VATSIM nicht erreichbar)':''}</p>`}
   else{
-    const me=[p.latitude,p.longitude],vs=FD.vs,gs=p.groundspeed,ph=phase();
+    const me=[p.latitude,p.longitude],vs=CUR.vs,gs=p.groundspeed,ph=phase();
     /* Rest entlang der Route: zum nächsten Wegpunkt + aufsummierte Abschnitte bis zum Ziel bzw. TOD-Punkt.
        (Luftlinie täuscht: der TOD kann geografisch nah am Platz liegen, wenn die STAR eine Schleife fliegt.) */
     const W=P.wps||[];let dA=nm(me,P.arrPos),todFromArr=null;

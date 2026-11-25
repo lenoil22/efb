@@ -5,6 +5,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import http from 'node:http';
+import dgram from 'node:dgram';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +23,8 @@ export const DEFAULTS = {
   awayMin: 25,               // Weg-Modus: Alarm nach so vielen Minuten (VATSIM: max. 30)
   pauseAfterSec: 10,         // Pause-Alarm, wenn der Sim in der Luft so lange pausiert
   sectorLeadMin: 5,          // „Neuer Lotse voraus“ so viele Minuten vorher
+  lanPort: 8790,             // WLAN direkt: Handy verbindet sich hierhin (Ereignisse, Live-Daten, Befehle)
+  lanBeaconPort: 8791,       // UDP-Rundruf, damit das Handy den PC im WLAN findet
   lvars: { warning: '', caution: '', ap1: '', ap2: '' }  // leer = automatisch suchen
 };
 
@@ -53,12 +58,13 @@ export function makeNtfy(cfg, fetchImpl = fetch) {
   const base = cfg.ntfyServer.replace(/\/$/, '');
   const cmdTopic = cfg.topic + '-cmd';
   const backAction = [{ action: 'http', label: 'Bin zurück', url: `${base}/${cmdTopic}`, method: 'POST', body: 'da', clear: true }];
-  /* kind = Alarmart für die Handy-App (Tag „efb-<kind>“): warning, caution, ap, pause, tod, away, test, info */
-  async function send({ title, message, priority = 3, tags = [], back = false, kind = 'info' }) {
+  /* kind = Alarmart für die Handy-App (Tag „efb-<kind>“): warning, caution, ap, pause, tod, sector, away, test, info.
+     aid = gleiche Alarm-ID wie über WLAN direkt → die App zeigt/klingelt nur einmal (Tag „aid-<id>“) */
+  async function send({ title, message, priority = 3, tags = [], back = false, kind = 'info', aid = '' }) {
     try {
       const r = await fetchImpl(base + '/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: cfg.topic, title, message, priority, tags: [...tags, 'efb-' + kind], ...(back ? { actions: backAction } : {}) })
+        body: JSON.stringify({ topic: cfg.topic, title, message, priority, tags: [...tags, 'efb-' + kind, ...(aid ? ['aid-' + aid] : [])], ...(back ? { actions: backAction } : {}) })
       });
       log(r.ok ? `→ Handy: ${title}` : `ntfy-Fehler ${r.status} bei „${title}“`);
     } catch (e) { log('ntfy nicht erreichbar:', e.message); }
@@ -92,6 +98,65 @@ export function makeNtfy(cfg, fetchImpl = fetch) {
     }
   }
   return { send, listen, status, cmdTopic };
+}
+
+/* ---------- WLAN direkt: kleiner Server im Heimnetz ----------
+   GET  /events?k=<kanal>  → Server-Sent Events: „alarm“, „status“, „live“ (Position jede Sekunde)
+   POST /cmd?k=<kanal>     → „weg“ / „da“
+   UDP-Rundruf alle 2 s an Port lanBeaconPort, damit das Handy den PC findet (auch bei neuer IP).
+   Schlüssel = ntfy-Kanal aus dem Koppeln; ohne ihn antwortet der Server nicht. */
+export function makeLan(cfg, { onCmd, listen = true } = {}) {
+  const clients = new Set(), key = cfg.topic;
+  let lastStatus = '';
+  const id = crypto.createHash('sha256').update(key).digest('hex').slice(0, 12);
+  const srv = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x');
+    if (u.searchParams.get('k') !== key) { res.writeHead(403); res.end(); return; }
+    if (req.method === 'GET' && u.pathname === '/events') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+      res.write(': EFB Bridge\n\n'); clients.add(res);
+      if (lastStatus) res.write(`event: status\ndata: ${lastStatus}\n\n`);
+      log(`Handy per WLAN verbunden (${req.socket.remoteAddress?.replace('::ffff:', '')}).`);
+      req.on('close', () => { clients.delete(res); log('Handy per WLAN getrennt.'); });
+      return;
+    }
+    if (req.method === 'POST' && u.pathname === '/cmd') {
+      let b = ''; req.on('data', d => b += d); req.on('end', () => { const c = b.trim().toLowerCase(); if (c) onCmd?.(c); res.end('ok'); });
+      return;
+    }
+    res.writeHead(404); res.end();
+  });
+  const send = (ev, data) => { const s = `event: ${ev}\ndata: ${data}\n\n`; for (const r of clients) r.write(s); };
+  let beacon = null, timers = [];
+  if (listen) {
+    srv.on('error', e => log(`WLAN-Server (Port ${cfg.lanPort}) nicht möglich: ${e.message} – nur ntfy.`));
+    srv.listen(cfg.lanPort, '0.0.0.0', () => log(`WLAN direkt bereit (Port ${cfg.lanPort}).`));
+    timers.push(setInterval(() => { for (const r of clients) r.write(': ka\n\n'); }, 20000));
+    beacon = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    beacon.on('error', () => { });
+    beacon.bind(() => {
+      try { beacon.setBroadcast(true); } catch { }
+      timers.push(setInterval(() => {
+        const msg = Buffer.from(JSON.stringify({ efb: 1, id, port: srv.address()?.port || cfg.lanPort }));
+        const targets = new Set(['255.255.255.255']);
+        for (const list of Object.values(os.networkInterfaces())) for (const n of list || []) {
+          if (n.family !== 'IPv4' || n.internal) continue;
+          const ip = n.address.split('.').map(Number), m = n.netmask.split('.').map(Number);
+          targets.add(ip.map((b, i) => (b | (~m[i] & 255))).join('.'));      // Subnetz-Broadcast, z. B. 192.168.1.255
+        }
+        for (const t of targets) beacon.send(msg, cfg.lanBeaconPort, t, () => { });
+      }, 2000));
+    });
+  }
+  return {
+    id, port: () => srv.address()?.port,
+    alarm: o => send('alarm', JSON.stringify(o)),
+    status: s => { lastStatus = JSON.stringify(s); send('status', lastStatus); },
+    live: o => { if (clients.size) send('live', JSON.stringify(o)); },
+    count: () => clients.size,
+    close: () => { timers.forEach(clearInterval); try { beacon?.close(); } catch { } srv.close(); for (const r of clients) r.end(); },
+    server: srv
+  };
 }
 
 /* ---------- Fenix-L-Vars aus der Liste des WASM-Moduls wählen ---------- */
@@ -129,6 +194,7 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
     if (d.gs != null) st.gsKt = d.gs / 65536 * 1.943844;
     if (d.onGround != null) st.onGround = d.onGround === 1;
     if (d.paused != null) st.paused = d.paused !== 0;
+    if (d.vs != null) st.vsFpm = Math.round(d.vs / 256 * 196.8504);
   }
   function vars(d, names) {
     for (const [role, name] of Object.entries(names)) {
@@ -295,7 +361,8 @@ const OFFSETS = [
   { name: 'alt', address: 0x0570, type: 'int', size: 8 },
   { name: 'gs', address: 0x02B4, type: 'int', size: 4 },
   { name: 'onGround', address: 0x0366, type: 'uint', size: 2 },
-  { name: 'paused', address: 0x0264, type: 'uint', size: 2 }
+  { name: 'paused', address: 0x0264, type: 'uint', size: 2 },
+  { name: 'vs', address: 0x02C8, type: 'int', size: 4 }        // Steigrate: m/s × 256
 ];
 export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
   let ws = null, names = null, declared = false, waitLogged = false, warned = false;
@@ -374,10 +441,23 @@ async function main() {
     console.log(`  ntfy-Kanal: ${cfg.topic}`);
     console.log('  Tasten: W = weg · D = wieder da · T = Test-Nachricht · S = Status · Q = beenden\n');
   } else log(`ntfy-Kanal: ${cfg.topic}`);
-  if (cfg._new) log('NEU: In der ntfy-App auf dem Handy „+“ tippen und genau diesen Kanal abonnieren.');
+  if (cfg._new) log('NEU: Handy über „Handy koppeln“ (QR-Code) mit der App EFB Wächter verbinden.');
   const ntfy = makeNtfy(cfg);
-  const mon = makeMonitor({ cfg, notify: n => ntfy.send(n) });
+  let mon = null;
+  const lan = makeLan(cfg, { onCmd: c => { log('Befehl vom Handy (WLAN):', c); mon.cmd(c); } });
+  /* Jeder Alarm geht doppelt raus – WLAN direkt und ntfy – mit derselben ID; die App nimmt den ersten */
+  const notify = n => {
+    const aid = crypto.randomBytes(5).toString('hex');
+    lan.alarm({ aid, kind: n.kind || 'info', title: n.title, message: n.message, priority: n.priority || 3, t: Date.now() });
+    ntfy.send({ ...n, aid });
+  };
+  mon = makeMonitor({ cfg, notify });
   setInterval(mon.tick, 1000);
+  /* Live-Daten aus dem Sim jede Sekunde – nur über WLAN (ntfy hat ein Tageslimit) */
+  setInterval(() => {
+    const s = mon.st; if (s.lat == null) return;
+    lan.live({ lat: s.lat, lon: s.lon, alt: Math.round(s.altFt), gs: Math.round(s.gsKt), vs: s.vsFpm ?? null, gnd: s.onGround, paused: s.paused, ap: !!(s.ap1 || s.ap2), t: Date.now() });
+  }, 1000);
   ntfy.listen(c => { log('Befehl vom Handy:', c); mon.cmd(c); });
   /* Neuer Lotse voraus: Sektoren + Online-Lotsen (VATSIM, alle 60 s) + SimBrief-Route, Prüfung alle 30 s */
   let route = null, ctl = [];
@@ -395,23 +475,26 @@ async function main() {
     catch (e) { log('SimBrief nicht geladen:', e.message); }
   } else log('Kein SimBrief-Name in config.json – TOD-Alarm aus.');
   const sim = connectSim(cfg, mon);
-  ntfy.send({ kind: 'info', title: 'EFB Bridge läuft', message: 'Push kommt an. Warnungen aus dem Sim landen hier.', priority: 2, tags: ['white_check_mark'] });
+  notify({ kind: 'info', title: 'EFB Bridge läuft', message: 'Push kommt an. Warnungen aus dem Sim landen hier.', priority: 2, tags: ['white_check_mark'] });
   /* Status: für die Tray-App (EFB-Bridge.exe) als Zeile „@status {…}“, für die Handy-App über den Status-Kanal */
-  let lastStatus = '';
+  let lastStatus = '', lastPub = '';
   const pub = () => ({ on: true, ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, awaySince: mon.st.away ? mon.st.awaySince : 0, awayMin: cfg.awayMin, sb: cfg.simbriefUser || '' });
   setInterval(() => {
     const s = JSON.stringify({ ws: sim.state.ws, sim: sim.state.sim, fenix: sim.state.fenix, away: mon.st.away, topic: cfg.topic });
     if (s !== lastStatus) { lastStatus = s; console.log('@status ' + s); }
-    ntfy.status(pub());
+    const p = pub(), ps = JSON.stringify(p);
+    if (ps !== lastPub) { lastPub = ps; lan.status({ ...p, rx: Date.now() }); }
+    ntfy.status(p);
   }, 1000);
   const quit = async () => {             // Handy-App: „PC-Bridge aus“
+    lan.status({ on: false, rx: Date.now() });
     try { await fetch(`${cfg.ntfyServer.replace(/\/$/, '')}/${cfg.topic}-status`, { method: 'POST', body: JSON.stringify({ on: false }), headers: { Priority: '1' }, signal: AbortSignal.timeout(2500) }); } catch { }
     process.exit(0);
   };
   const run = k => {
     if (k === 'w' || k === 'weg') mon.cmd('weg');
     else if (k === 'd' || k === 'da') mon.cmd('da');
-    else if (k === 't') ntfy.send({ kind: 'test', title: 'Test', message: 'Test-Nachricht von der EFB Bridge.', priority: 3, tags: ['test_tube'] });
+    else if (k === 't') notify({ kind: 'test', title: 'Test', message: 'Test-Nachricht von der EFB Bridge.', priority: 3, tags: ['test_tube'] });
     else if (k === 's') { const s = mon.st; log(`Status: ${s.simSeen ? 'Sim da' : 'kein Sim'} · ${Math.round(s.altFt)} ft · ${Math.round(s.gsKt)} kt · ${s.onGround ? 'Boden' : 'Luft'}${s.paused ? ' · PAUSE' : ''} · AP ${s.ap1 || s.ap2 ? 'an' : 'aus'} · Weg-Modus ${s.away ? 'an' : 'aus'}`); }
     else if (k === 'q' || k === '\u0003') quit();
   };

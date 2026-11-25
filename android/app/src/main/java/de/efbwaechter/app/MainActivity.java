@@ -53,8 +53,13 @@ public class MainActivity extends Activity {
         setContentView(web);
         web.loadUrl(UI_URL);
 
+        java.util.ArrayList<String> need = new java.util.ArrayList<>();
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+            need.add(Manifest.permission.POST_NOTIFICATIONS);
+        // neuere Android-Versionen: Zugriff aufs Heimnetz (WLAN direkt zum PC) braucht eine Erlaubnis
+        if (Build.VERSION.SDK_INT >= 36 && checkSelfPermission("android.permission.ACCESS_LOCAL_NETWORK") != PackageManager.PERMISSION_GRANTED)
+            need.add("android.permission.ACCESS_LOCAL_NETWORK");
+        if (!need.isEmpty()) requestPermissions(need.toArray(new String[0]), 1);
         pairFrom(getIntent());
         WatchService.start(this);
     }
@@ -64,9 +69,10 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         WatchService.uiListener = () -> web.evaluateJavascript("window.efbUpdate&&efbUpdate()", null);
+        WatchService.liveListener = () -> web.evaluateJavascript("window.efbLive&&efbLive()", null);
         web.evaluateJavascript("window.efbUpdate&&efbUpdate()", null);
     }
-    @Override protected void onPause() { WatchService.uiListener = null; super.onPause(); }
+    @Override protected void onPause() { WatchService.uiListener = null; WatchService.liveListener = null; super.onPause(); }
 
     @Override public void onBackPressed() { if (web.canGoBack()) web.goBack(); else super.onBackPressed(); }
 
@@ -95,6 +101,7 @@ public class MainActivity extends Activity {
                 String st = Prefs.status(MainActivity.this);
                 o.put("status", st.isEmpty() ? JSONObject.NULL : new JSONObject(st));
                 o.put("connected", WatchService.connected);
+                o.put("lan", WatchService.lanConnected);
                 NotificationManager nm = getSystemService(NotificationManager.class);
                 o.put("notif", nm.areNotificationsEnabled());
                 o.put("fsi", Build.VERSION.SDK_INT < 34 || nm.canUseFullScreenIntent());
@@ -103,6 +110,8 @@ public class MainActivity extends Activity {
                 return o.toString();
             } catch (Exception e) { return "{}"; }
         }
+        /** Live-Daten aus dem Sim (WLAN direkt), sonst "" */
+        @JavascriptInterface public String live() { return WatchService.lanConnected ? WatchService.live : ""; }
         @JavascriptInterface public void setTopic(String t) {
             Prefs.topic(MainActivity.this, t == null ? "" : t.trim());
             WatchService.reconnect();
