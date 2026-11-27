@@ -363,7 +363,8 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
   const st = {
     lat: null, lon: null, altFt: 0, gsKt: 0, onGround: true, paused: false, pausedSince: 0, pauseSent: false,
     warn: false, caut: false, ap1: false, ap2: false, apWasOn: false,
-    tod: null, todSent: false, todLast: null, away: false, awaySince: 0, awaySent: false, simSeen: false
+    tod: null, todSent: false, todLast: null, todHintSent: false, todFms: null, away: false, awaySince: 0, awaySent: false, simSeen: false,
+    track: [], route: null
   };
   const last = {};
   const cool = (k, ms) => { const t = now(); if (last[k] && t - last[k] < ms) return false; last[k] = t; return true; };
@@ -375,6 +376,12 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
     if (d.alt != null) st.altFt = d.alt / 4294967296 * 3.28084;
     if (d.gs != null) st.gsKt = d.gs / 65536 * 1.943844;
     if (d.onGround != null) st.onGround = d.onGround === 1;
+    /* Flugspur der letzten 2 min (für Direct-Erkennung), höchstens ein Punkt pro 5 s */
+    if (st.lat != null && !st.onGround) {
+      const t = now(), lp = st.track[st.track.length - 1];
+      if (!lp || t - lp.t >= 5000) st.track.push({ lat: st.lat, lon: st.lon, t });
+      while (st.track.length && t - st.track[0].t > 120000) st.track.shift();
+    }
     if (d.paused != null) st.paused = d.paused !== 0;
     if (d.vs != null) st.vsFpm = Math.round(d.vs / 256 * 196.8504);
     if (d.g != null) st.g = d.g / 624;
@@ -420,12 +427,21 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
       }
     } else { st.pausedSince = 0; st.pauseSent = false; }
     // Top of Descent
-    if (st.tod && !st.todSent && !st.onGround && st.gsKt > 100 && st.lat != null) {
-      const d = nm(st.lat, st.lon, st.tod[0], st.tod[1]), min = d / st.gsKt * 60;
+    if ((st.tod || st.todFms != null) && !st.todSent && !st.onGround && st.gsKt > 100 && st.lat != null) {
+      /* Vorrang hat der TOD laut FMS (vom Nutzer eingetragen, geflogene Strecke abgezogen).
+         Sonst Reststrecke bis SimBrief-TOD entlang der Route (Directs über die Flugspur), ohne Route Luftlinie zum TOD-Punkt. */
+      const fms = st.todFms != null;
+      const a = !fms && st.route ? along([st.lat, st.lon], st.route, st.track, now()) : null;
+      const d = fms ? st.todFms : a?.dT != null ? a.dT : nm(st.lat, st.lon, st.tod[0], st.tod[1]), min = d / st.gsKt * 60;
       const closing = st.todLast == null || d < st.todLast + 0.2;
       st.todLast = d;
+      /* SimBrief-TOD kann deutlich vom FMS abweichen → etwa 15 min vorher an den FMS-Wert erinnern (einmal) */
+      if (!fms && !st.todHintSent && closing && min <= 15 && min > cfg.todLeadMin) {
+        notify({ kind: 'tod', title: 'Bald Top of Descent – FMS-Wert eintragen', message: `Laut SimBrief noch ${Math.round(d)} NM (ca. ${Math.round(min)} min). Dein FMS kann anders rechnen: T/D vom ND oder der PROG-Seite in der App eintragen.`, priority: 3, tags: ['arrow_lower_right'] });
+        st.todHintSent = true;
+      }
       if (closing && d > 1 && min <= cfg.todLeadMin) {
-        notify({ kind: 'tod', title: `TOD in ${Math.max(1, Math.round(min))} min`, message: `Noch ${Math.round(d)} NM bis Top of Descent. Sinkflug vorbereiten / anfragen.`, priority: 4, tags: ['arrow_lower_right'] });
+        notify({ kind: 'tod', title: `TOD in ${Math.max(1, Math.round(min))} min${fms ? '' : ' (laut SimBrief)'}`, message: `Noch ${Math.round(d)} NM bis Top of Descent${fms ? ' laut FMS' : ' laut SimBrief – kann vom FMS abweichen'}. Sinkflug vorbereiten / anfragen.`, priority: 4, tags: ['arrow_lower_right'] });
         st.todSent = true;
       }
     }
@@ -450,7 +466,11 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
       st.away = false; st.awaySent = false;
     }
   }
-  const setTod = p => { st.tod = p; st.todSent = false; st.todLast = null; };
+  const setTod = p => { st.tod = p; st.todSent = false; st.todLast = null; st.todHintSent = false; };
+  const setRoute = plan => { st.route = plan?.wps?.length ? plan : null; };
+  /* TOD laut FMS: Reststrecke in NM (null = wieder SimBrief). Neuer Eintrag → Alarm darf neu kommen. */
+  const setFmsTod = rem => { st.todFms = rem; };
+  const todReset = () => { st.todSent = false; st.todLast = null; };
   /* Neuer Lotse voraus: höchstens einmal pro Rufzeichen und Flug; sectorLeadMin vorher */
   const told = new Set();
   function sector(info) {         // info = { cur:[…], next:{cs,freq,d,distNm,at} | null }
@@ -471,7 +491,7 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
   }
   /* Anflug-Monitor: umgerechnete Zusatzwerte (Gruppe „anf“) */
   function anf(d) { Object.assign(st, anfConvert(d)); }
-  return { st, offsets, vars, tick, cmd, setTod, sector, anf };
+  return { st, offsets, vars, tick, cmd, setTod, setRoute, setFmsTod, todReset, sector, anf };
 }
 
 /* ---------- Logbuch: Off-Block, Start, Landung (Aufsetzrate + G), On-Block ----------
@@ -534,11 +554,51 @@ export async function loadTod(user, fetchImpl = fetch) {
   };
 }
 
-/* Rest entlang der Route (wie in der Handy-App): NM bis Ziel und bis TOD ab Position me */
-export function along(me, plan) {
+/* TOD laut FMS: vom Nutzer eingetragene NM bis zum T/D (ND / PROG-Seite). Jede Sekunde wird die geflogene
+   Strecke abgezogen; Sprünge über 5 NM (Slew, Teleport) zählen nicht. */
+export function makeFmsTod() {
+  let s = null;
+  return {
+    set(nmVal, pos) { s = { nm: nmVal, flown: 0, last: pos && pos[0] != null ? [pos[0], pos[1]] : null }; },
+    clear() { s = null; },
+    update(pos) {
+      if (!s || !pos || pos[0] == null) return;
+      if (s.last) { const d = nm(s.last[0], s.last[1], pos[0], pos[1]); if (d < 5) s.flown += d; }
+      s.last = [pos[0], pos[1]];
+    },
+    get remaining() { return s ? s.nm - s.flown : null; },
+    get entered() { return s ? s.nm : null; }
+  };
+}
+/* Flugspur: Kurs aus den Positionen der letzten ~90 s ({lat, lon, t}); null, wenn zu wenig Bewegung */
+export function trackBrg(track, now = Date.now()) {
+  const pts = (track || []).filter(p => now - p.t <= 90000);
+  if (pts.length < 2) return null;
+  const a = pts[0], b = pts[pts.length - 1];
+  if (nm(a.lat, a.lon, b.lat, b.lon) < 0.5) return null;
+  return brg(a.lat, a.lon, b.lat, b.lon);
+}
+/* Welchen Wegpunkt fliegt man gerade an? Bei Direct liegt der nächste Punkt auf der Route oft nicht vorn:
+   dann den Punkt wählen, auf den die Spur zeigt (≤ 20° Abweichung, der nächste davon). null → Nächster-Punkt-Logik. */
+export function activeWp(me, plan, track, now) {
+  const W = plan?.wps || [], tb = trackBrg(track, now);
+  if (!W.length || tb == null) return null;
+  let bi = 0, bd = 1e9; W.forEach((w, i) => { const d = nm(me[0], me[1], w[0], w[1]); if (d < bd) { bd = d; bi = i; } });
+  let best = null, bestD = 1e9;
+  for (let k = Math.max(0, bi - 3); k < W.length; k++) {
+    const d = nm(me[0], me[1], W[k][0], W[k][1]);
+    if (d < 0.5) continue;
+    if (Math.abs(adiff(brg(me[0], me[1], W[k][0], W[k][1]), tb)) <= 20 && d < bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+/* Rest entlang der Route (wie in der Handy-App): NM bis Ziel und bis TOD ab Position me.
+   track (optional): Spur der letzten Minuten – damit wird ein Direct erkannt. */
+export function along(me, plan, track, now) {
   const W = plan?.wps; if (!W?.length || !plan.total) return null;
   let bi = 0, bd = 1e9; W.forEach((w, i) => { const d = nm(me[0], me[1], w[0], w[1]); if (d < bd) { bd = d; bi = i; } });
   let nx = bi; if (bi < W.length - 1 && nm(me[0], me[1], W[bi + 1][0], W[bi + 1][1]) < nm(W[bi][0], W[bi][1], W[bi + 1][0], W[bi + 1][1])) nx = bi + 1;
+  const kd = activeWp(me, plan, track, now); if (kd != null) nx = kd;
   const base = nm(me[0], me[1], W[nx][0], W[nx][1]) - W[nx][3];
   const todCum = plan.todCum ?? (plan.crz ? plan.total - Math.max(0, (plan.crz - plan.arrElev) * 3 / 1000) : null);
   return { dA: plan.total + base, dT: todCum != null ? todCum + base : null, passed: nx > 0 ? W[nx - 1] : null };
@@ -562,6 +622,21 @@ export function atisInfo(atisList, icao) {
   const rws = [...new Set([...txt.matchAll(/(?:RUNWAY|RWY)S?\s*(?:IN USE\s*)?(?:FOR\s+(?:LANDING|ARRIVAL)S?\s*)?((?:\d{2}\s?[LRC]?\b(?:\s*(?:AND|,|\/)?\s*)?)+)/gi)].flatMap(m => [...m[1].matchAll(/\d{2}\s?[LRC]?/g)].map(r => r[0].replace(/\s/g, '').toUpperCase())))];
   const q = txt.match(/QNH\s*(\d{3,4})/i) || txt.match(/\bQ(\d{4})\b/);
   return { cs: a.callsign, code: a.atis_code || '', rws, qnh: q ? q[1] : '', freq: a.frequency };
+}
+/* Wen nach dem Start rufen? Deutsche VATSIM-ATIS sagen es meist selbst:
+   „WHEN AIRBORNE CONTACT BREMEN RADAR ON FREQ 126.325“, „WHEN PASSING 2000FT CONTACT BREMEN RADAR 120.540“.
+   Bevorzugt die Abflug-ATIS (_D_). Gleiche Regel steht in handy/index.html (atisDep) und index.html. */
+export function atisDep(atisList, icao) {
+  icao = (icao || '').toUpperCase(); if (!icao) return null;
+  const mine = atisList.filter(x => x.callsign.split('_')[0] === icao);
+  const a = mine.find(x => /_D_/.test(x.callsign)) || mine.find(x => !/_A_/.test(x.callsign)) || mine[0];
+  if (!a) return null;
+  const txt = (a.text_atis || []).join(' ').toUpperCase().replace(/\s+/g, ' ');
+  const m = txt.match(/(?:WHEN (?:AIRBORNE|AIRBORN|PASSING [\d ]+ ?(?:FT|FEET)?)|AFTER (?:DEPARTURE|TAKE ?OFF))[^.]*?CONTACT ([A-Z][A-Z ]*?)\s+(?:ON\s+)?(?:FREQ(?:UENCY)?\s+)?(1[1-3]\d[.,]\d{1,3})/);
+  if (!m) return null;
+  const freq = m[2].replace(',', '.').padEnd(7, '0').slice(0, 7);
+  const name = m[1].trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  return { cs: a.callsign, name, freq };
 }
 
 /* ---------- Landebahnen (OurAirports, gemeinfrei) für den Anflug-Monitor ----------
@@ -851,8 +926,15 @@ async function main() {
     /* Anflug-Monitor: Bahn / Vapp von Hand („auto“ = wieder automatisch) */
     else if (lc.startsWith('rwy:')) { const r = c.slice(4).trim().toUpperCase(); enHand.rwy = /^\d{1,2}[LRC]?$/.test(r) ? r : null; log(`Anflug-Bahn: ${enHand.rwy || 'automatisch'}`); }
     else if (lc.startsWith('vapp:')) { const n = parseInt(c.slice(5), 10); enHand.vapp = n >= 100 && n <= 180 ? n : null; log(`Vapp: ${enHand.vapp || 'geschätzt'}`); }
+    /* TOD laut FMS: NM bis T/D vom ND / PROG-Seite („auto“ = wieder SimBrief) */
+    else if (lc.startsWith('tod:')) {
+      const v = c.slice(4).trim().toLowerCase(), n = parseFloat(v.replace(',', '.'));
+      if (v === 'auto') { fmsTod.clear(); mon.setFmsTod(null); mon.todReset(); log('TOD: wieder laut SimBrief'); }
+      else if (n > 0 && n <= 400) { fmsTod.set(n, [mon.st.lat, mon.st.lon]); mon.setFmsTod(n); mon.todReset(); log(`TOD laut FMS: ${n} NM`); }
+    }
   }
   const enHand = { rwy: null, vapp: null };
+  const fmsTod = makeFmsTod();
   /* Ereignisse vom vPilot-Plugin: Nachrichten, SELCAL, Verbindung, ATIS/METAR-Antworten */
   function onVpilot(e) {
     const me = (vp.cs || plan?.cs || '').toUpperCase();
@@ -887,18 +969,25 @@ async function main() {
     let rwy = rw.ok ? pickRunway(rw, plan.arr, plan.arrRwy, atisInfo(atisList, plan.arr), enHand.rwy) : null;
     if (!rwy && plan.arrPos) rwy = { id: plan.arr, lat: plan.arrPos[0], lon: plan.arrPos[1], elev: plan.arrElev, hdg: null, src: 'apt' };   // Bahn unbekannt → Flughafen-Mittelpunkt
     const st = { ...s, iasKt: s.iasKt ?? s.gsKt, flaps: s.flaps ?? 0, gear: !!s.gear, spdbrk: s.spdbrk ?? 0 };
-    const r = en.update(st, { plan, rwy, vapp: enHand.vapp, todPassed: !!(a && a.dT != null && a.dT < 0) });
+    const fr = fmsTod.remaining, todPassed = fr != null ? fr < 0 : !!(a && a.dT != null && a.dT < 0);
+    const r = en.update(st, { plan, rwy, vapp: enHand.vapp, todPassed });
     for (const e of r.events) lanAlarm({ kind: 'energy', title: e.level === 'urgent' ? e.text : 'Anflug: ' + e.text, message: e.why ? e.why.join(' · ') : '', priority: e.level === 'urgent' ? 5 : 3 });
     return r.view.on ? { ...r.view, apt: plan.arr, rwys: rw.ok ? rw.airport(plan.arr).map(x => x.id) : [], ias0: s.iasKt == null } : null;
   }
   /* Live-Daten aus dem Sim jede Sekunde – nur über WLAN (ntfy hat ein Tageslimit). Mit TOD/ETA entlang der Route. */
   setInterval(() => {
     const s = mon.st; if (s.lat == null) return;
-    const a = plan ? along([s.lat, s.lon], plan) : null, gs = s.gsKt;
+    const a = plan ? along([s.lat, s.lon], plan, s.track) : null, gs = s.gsKt;
     const mins = d => d != null && gs > 80 ? Math.round(d / gs * 60) : null;
+    /* TOD laut FMS: geflogene Strecke abziehen; am Boden oder 30 NM nach dem T/D wieder vergessen */
+    fmsTod.update([s.lat, s.lon]);
+    let fr = fmsTod.remaining; if (fr != null && (s.onGround || fr < -30)) { fmsTod.clear(); fr = null; }
+    mon.setFmsTod(fr);
     let ev = null; try { ev = energy(s, a); } catch (e) { log('Anflug-Monitor:', e.message); }
+    const tod = fr != null ? { todNm: Math.max(0, Math.round(fr)), todMin: fr > 0 ? mins(fr) : 0, todSrc: 'fms', todSet: fmsTod.entered }
+      : { todNm: a && a.dT > 1 ? Math.round(a.dT) : null, todMin: a && a.dT > 1 ? mins(a.dT) : null, todSrc: 'plan' };
     lan.live({ lat: s.lat, lon: s.lon, alt: Math.round(s.altFt), gs: Math.round(gs), vs: s.vsFpm ?? null, gnd: s.onGround, paused: s.paused, ap: !!(s.ap1 || s.ap2),
-      dA: a ? Math.round(a.dA) : null, etaMin: mins(a?.dA), todMin: a && a.dT > 1 ? mins(a.dT) : null, todNm: a && a.dT > 1 ? Math.round(a.dT) : null, en: ev, t: Date.now() });
+      dA: a ? Math.round(a.dA) : null, etaMin: mins(a?.dA), ...tod, en: ev, t: Date.now() });
   }, 1000);
   ntfy.listen(c => { log('Befehl vom Handy (ntfy):', c); handleCmd(c); });
   /* Neuer Lotse voraus + ATIS am Ziel: Online-Lotsen und ATIS (VATSIM, alle 60 s), Prüfung alle 30 s */
@@ -936,7 +1025,7 @@ async function main() {
     }
   }, 60000);
   if (cfg.simbriefUser) {
-    try { plan = await loadTod(cfg.simbriefUser); mon.setTod(plan.tod); log(`SimBrief: ${plan.flight} · TOD ${plan.tod ? 'gefunden' : 'nicht im OFP'} · ${plan.wps.length} Wegpunkte`); }
+    try { plan = await loadTod(cfg.simbriefUser); mon.setTod(plan.tod); mon.setRoute(plan); log(`SimBrief: ${plan.flight} · TOD ${plan.tod ? 'gefunden' : 'nicht im OFP'} · ${plan.wps.length} Wegpunkte`); }
     catch (e) { log('SimBrief nicht geladen:', e.message); }
   } else log('Kein SimBrief-Name in config.json – TOD-Alarm aus.');
   sim = connectSim(cfg, mon);

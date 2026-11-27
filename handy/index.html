@@ -77,6 +77,8 @@ input:focus{outline:2px solid var(--cyan);outline-offset:1px}
 .inst small{font:600 12px var(--mono);color:var(--t3)}
 .times{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 .tile{background:var(--s2);border-radius:var(--r-md);padding:12px}
+.tile.todt{display:block;width:100%;text-align:left;transition:transform .1s ease-out}.tile.todt:active{transform:scale(.97)}
+.tile .warnl{color:var(--amber);margin-top:4px}
 .tile b{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--t3)}
 .tile .big{font-size:23px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
 .tile .big.amber{color:var(--amber)}
@@ -610,6 +612,21 @@ async function pull(){
   render();
 }
 const nm=(a,b)=>{if(!a||!b)return null;const R=3440.065,r=x=>x*Math.PI/180,dl=r(b[0]-a[0]),dn=r(b[1]-a[1]);const h=Math.sin(dl/2)**2+Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+/* Flugspur + Direct-Erkennung – gleiche Regel wie bridge.mjs (trackBrg / activeWp) */
+const TRK=[];
+const brgD=(a,b)=>{const r=x=>x*Math.PI/180,y=Math.sin(r(b[1]-a[1]))*Math.cos(r(b[0])),x=Math.cos(r(a[0]))*Math.sin(r(b[0]))-Math.sin(r(a[0]))*Math.cos(r(b[0]))*Math.cos(r(b[1]-a[1]));return(Math.atan2(y,x)*180/Math.PI+360)%360};
+function trackBrg(){const t=Date.now(),q=TRK.filter(x=>t-x.t<=90000);if(q.length<2)return null;const a=q[0],b=q[q.length-1];if(nm([a.lat,a.lon],[b.lat,b.lon])<.5)return null;return brgD([a.lat,a.lon],[b.lat,b.lon])}
+function activeWp(me,W){const tb=trackBrg();if(!W.length||tb==null)return null;let bi=0,bd=1e9;W.forEach((w,i)=>{const d=nm(me,w);if(d<bd){bd=d;bi=i}});
+  let best=null,bD=1e9;for(let k=Math.max(0,bi-3);k<W.length;k++){const d=nm(me,W[k]);if(d<.5)continue;const df=Math.abs(((brgD(me,W[k])-tb)%360+540)%360-180);if(df<=20&&d<bD){bD=d;best=k}}return best}
+function trackPush(p){if(!p||p.groundspeed<40){TRK.length=0;return}const t=Date.now(),l=TRK[TRK.length-1];if(!l||t-l.t>=5000)TRK.push({lat:p.latitude,lon:p.longitude,t});while(TRK.length&&t-TRK[0].t>120000)TRK.shift()}
+/* Wen nach dem Start rufen? Steht meist in der ATIS – gleiche Regel wie bridge.mjs (atisDep) */
+function atisDep(icao){
+  icao=(icao||'').toUpperCase();if(!icao)return null;const mine=FD.atis.filter(x=>x.callsign.split('_')[0]===icao);
+  const a=mine.find(x=>/_D_/.test(x.callsign))||mine.find(x=>!/_A_/.test(x.callsign))||mine[0];if(!a)return null;
+  const txt=(a.text_atis||[]).join(' ').toUpperCase().replace(/\s+/g,' ');
+  const m=txt.match(/(?:WHEN (?:AIRBORNE|AIRBORN|PASSING [\d ]+ ?(?:FT|FEET)?)|AFTER (?:DEPARTURE|TAKE ?OFF))[^.]*?CONTACT ([A-Z][A-Z ]*?)\s+(?:ON\s+)?(?:FREQ(?:UENCY)?\s+)?(1[1-3]\d[.,]\d{1,3})/);
+  if(!m)return null;return{cs:a.callsign,name:m[1].trim().toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()),freq:m[2].replace(',','.').padEnd(7,'0').slice(0,7)};
+}
 const alt=(a,gs)=>gs<40?'Boden':a>=(FD.plan?.ta||5000)?'FL'+String(Math.round(a/100)).padStart(3,'0'):Math.round(a/100)*100+' ft';
 /* Live-Daten direkt aus dem Sim (App + PC im selben WLAN), sonst null → VATSIM */
 function liveData(){
@@ -681,7 +698,7 @@ function render(){
   const L=liveData();
   CUR=L?{p:{latitude:L.lat,longitude:L.lon,altitude:L.alt,groundspeed:L.gs},vs:L.vs,src:'live vom PC'}:{p:FD.p,vs:FD.vs,src:FD.p?'VATSIM · ~15 s':''};
   $('#fdSrc').textContent=CUR.src;
-  const p=CUR.p;NEXT={sector:null,tod:null};
+  const p=CUR.p;NEXT={sector:null,tod:null};trackPush(p);
   const head=`<div class="flt"><span class="cs">${esc(P.cs)}</span><span class="rt">${esc(P.dep)} → ${esc(P.arr)}</span>${p?`<span class="chip">${esc(phase())}</span>`:''}</div>`;
   if(!p){fd.innerHTML=head+`<p class="sub">Gerade nicht mit VATSIM verbunden${window.EFBApp?' und kein Sim im WLAN':''}.${FD.err?' VATSIM ist nicht erreichbar.':''}</p>`}
   else{
@@ -692,6 +709,7 @@ function render(){
     if(W.length&&P.total){
       let bi=0,bd=1e9;W.forEach((w,i)=>{const d=nm(me,w);if(d<bd){bd=d;bi=i}});
       let nx=bi;if(bi<W.length-1&&nm(me,W[bi+1])<nm(W[bi],W[bi+1]))nx=bi+1;
+      const kd=activeWp(me,W);if(kd!=null)nx=kd;                         // Direct: den Punkt nehmen, auf den die Spur zeigt
       dA=P.total+nm(me,W[nx])-W[nx][3];
       const todCum=P.todCum!=null?P.todCum:P.crz?P.total-Math.max(0,(P.crz-P.arrElev)*3/1000):null;
       if(todCum!=null)todFromArr=P.total-todCum;
@@ -705,11 +723,16 @@ function render(){
       else if(gs>80){const m=dT/gs*60;tod=inMin(m);todSub=`${clock(m)} · ${Math.round(dT)} NM`;NEXT.tod={m}}
       else todSub=`${Math.round(todFromArr)} NM vor ${esc(P.arr)}`;
     }
+    /* TOD laut FMS (in der App eingetragen, die Bridge zieht die geflogene Strecke ab) hat Vorrang vor SimBrief */
+    const todFms=L&&L.todSrc==='fms';
+    if(todFms){NEXT.tod=null;
+      if(L.todNm<=0){tod='jetzt';todSub='laut FMS · Sinkflug einleiten';todPassed=false}
+      else{const m=L.todMin;tod=m!=null?inMin(m):L.todNm+' NM';todSub=`${m!=null?clock(m)+' · ':''}${L.todNm} NM · laut FMS`;if(m!=null)NEXT.tod={m}}}
     const vsTxt=vs==null?'–':(vs>0?'+':'')+vs;
     const tot=P.total||null,frac=tot&&dA!=null?Math.max(0,Math.min(1,1-dA/tot)):null,todF=tot&&todFromArr!=null?Math.max(0,Math.min(1,1-todFromArr/tot)):null;
     fd.innerHTML=head+
       `<div class="inst"><div><b>HÖHE</b><span>${alt(p.altitude,gs)}</span></div><div><b>GS</b><span>${gs}</span><small>kt</small></div><div><b>V/S</b><span class="n">${vsTxt}</span><small>ft/min</small></div></div>`+
-      `<div class="times"><div class="tile"><b>TOP OF DESCENT</b><div class="big${todPassed?'':' amber'}">${tod}</div><div class="sm">${todSub}</div></div>`+
+      `<div class="times"><button class="tile todt" data-todset aria-label="TOD laut FMS eintragen"><b>TOP OF DESCENT · ${todFms?'FMS':'SimBrief'}</b><div class="big${todPassed?'':' amber'}">${tod}</div><div class="sm">${todSub}</div>${todFms||todPassed?'':'<div class="sm warnl">kann vom FMS abweichen · antippen</div>'}</button>`+
       `<div class="tile"><b>ETA ${esc(P.arr)}</b><div class="big">${eta}</div><div class="sm">${etaSub}</div></div></div>`+
       (frac!=null?`<div class="track"><div class="line"></div><div class="done" style="width:${(frac*100).toFixed(1)}%"></div>${todF!=null?`<div class="tod" style="left:${(todF*100).toFixed(1)}%"></div><span class="lbl" style="left:${(todF*100).toFixed(1)}%">TOD</span>`:''}`+
         `<svg class="me" style="left:${(frac*100).toFixed(1)}%"><use href="#i-plane"/></svg><span class="lbl l">${esc(P.dep)}</span><span class="lbl r">${esc(P.arr)}</span></div>`:'');
@@ -735,11 +758,22 @@ function render(){
   if(lst.length){
     h+=stn('now',`Jetzt · ${esc(loc.icao)}${loc.atis?' · ATIS '+esc(loc.atis):''}`,{d:lname(lst[0]),freq:lst[0].frequency,cs:lst[0].callsign});
     if(lst.length>1)h+=`<div class="st"><small>Danach am Platz</small><div class="dest">${lst.slice(1).map(c=>`<span class="chip">${FAC[c.facility]} <em>${esc(c.frequency)}</em></span>`).join('')}</div></div>`;
-    if(cur.length)h+=stn('',atDep?'Nach dem Start':'Darüber',cur[0]);
+    /* Nach dem Start: was die ATIS sagt zuerst. Nicht besetzt → grau, darunter die zuständigen Sektoren (alle, nicht nur einer) */
+    const ad=atDep?atisDep(P.dep):null,adOn=ad&&FD.ctl.find(c=>c.frequency===ad.freq);
+    if(adOn)h+=stn('',`Nach dem Start · laut ATIS ${esc(P.dep)}`,{d:ad.name,freq:ad.freq,cs:adOn.callsign});
+    else{
+      if(ad)h+=`<div class="st"><small>Nach dem Start · laut ATIS ${esc(P.dep)}</small><div class="n"><span>${esc(ad.name)}</span><span class="f" style="color:var(--t3)">${esc(ad.freq)}</span></div><div class="x">gerade nicht besetzt – der Tower sagt dir, wen du rufst</div></div>`;
+      h+=cur.map((x,i)=>stn('',i?'Auch zuständig':atDep?(ad?'Zuständig, solange nicht besetzt':'Nach dem Start'):'Darüber',x)).join('');
+    }
   }
-  else if(cur.length)h+=cur.map((x,i)=>stn('now',i?'Auch zuständig':'Jetzt',x)).join('');
+  else if(cur.length||atisDep(P.dep)){
+    /* Kurz nach dem Abflug (bis 40 NM): die laut ATIS genannte Station zuerst, falls besetzt */
+    let list=cur.slice();const ad=dDep!=null&&dDep<40&&p&&!gnd?atisDep(P.dep):null,on=ad&&FD.ctl.find(c=>c.frequency===ad.freq);
+    if(on){list=list.filter(x=>x.freq!==ad.freq);list.unshift({d:ad.name+' (laut ATIS)',freq:ad.freq,cs:on.callsign})}
+    h+=list.length?list.map((x,i)=>stn('now',i?'Auch zuständig':'Jetzt',x)).join(''):`<div class="st now"><small>Jetzt</small><div class="n"><span>Kein Center online</span><span class="f" style="color:var(--t2)">122.800</span></div><div class="x">Unicom</div></div>`;
+  }
   else h+=`<div class="st now"><small>Jetzt</small><div class="n"><span>Kein Center online</span><span class="f" style="color:var(--t2)">122.800</span></div><div class="x">Unicom</div></div>`;
-  if(next&&!atArr){const when=NEXT.sector?inMin(NEXT.sector.m)+' · ':'';h+=stn('next',`${when}${next.dist>0?'in '+Math.round(next.dist)+' NM · ':''}ab ${esc(next.at)}`,next)}
+  if(next&&!atArr&&!(dDep!=null&&dDep<40&&atisDep(P.dep)?.freq===next.freq)){const when=NEXT.sector?inMin(NEXT.sector.m)+' · ':'';h+=stn('next',`${when}${next.dist>0?'in '+Math.round(next.dist)+' NM · ':''}ab ${esc(next.at)}`,next)}
   const ap=atArr?null:airport(P.arr);
   if(ap)h+=`<div class="st"><small>Ziel ${esc(ap.icao)}${ap.atis?' · ATIS '+esc(ap.atis):''}</small>${ap.list.length?`<div class="dest">${ap.list.map(c=>`<span class="chip">${({2:'DEL',3:'GND',4:'TWR',5:'APP'})[c.facility]||''} <em>${esc(c.frequency)}</em></span>`).join('')}</div>`:'<div class="x">Niemand online – Unicom 122.800</div>'}</div>`;
   atc.innerHTML=h;
@@ -752,7 +786,24 @@ window.efbAwayNext=()=>{
   if(NEXT.tod)it.push([NEXT.tod.m,`<div class="it"><span class="ic a"><svg><use href="#i-down"/></svg></span><div class="tx"><b>Top of Descent</b><span>Sinkflug anfragen</span></div><span class="tm">${inMin(NEXT.tod.m)}</span></div>`]);
   el.innerHTML=it.length?it.sort((a,b)=>a[0]-b[0]).map(x=>x[1]).join(''):'<div class="it"><div class="tx"><span>Gerade steht nichts an.</span></div></div>';
 };
+/* TOD laut FMS eintragen: Meilen bis zum T/D vom ND (Pfeil) oder der PROG-Seite → Befehl „tod:<NM>“ an die Bridge */
+function todSheet(){
+  const app=window.EFBApp&&window.EFBApp.send,el=document.createElement('div');el.id='todSheet';
+  el.innerHTML=`<div class="scrim" data-tclose></div><div class="sheet" role="dialog" aria-modal="true" aria-label="TOD laut FMS"><div class="grab"></div>
+    <p class="eyebrow">Top of Descent laut FMS</p>
+    <p class="sub" style="margin:6px 0 12px">Meilen bis zum T/D eintragen – vom ND (Pfeil auf der Route) oder der PROG-Seite im MCDU. Die Bridge zieht die geflogene Strecke ab, Alarm 5 min vorher.</p>
+    ${app?`<div style="display:flex;gap:8px"><input id="todIn" type="number" inputmode="decimal" min="1" max="400" placeholder="z. B. 48" aria-label="Meilen bis TOD"><button class="btn-s" data-tok>Übernehmen</button></div>
+    <p class="sub" id="todErr" style="color:var(--red);min-height:18px;margin-top:6px"></p>
+    <button class="ghost" data-tauto style="margin-top:4px">Wieder SimBrief nutzen</button>`:`<p class="sub">Das geht nur in der App „EFB Wächter“.</p>`}</div>`;
+  document.body.append(el);const i=el.querySelector('#todIn');if(i)i.focus();
+}
 document.addEventListener('click',e=>{
+  if(e.target.closest('[data-todset]')){todSheet();return}
+  if(e.target.closest('[data-tclose]')){$('#todSheet')?.remove();return}
+  if(e.target.closest('[data-tauto]')){window.EFBApp.send('tod:auto');$('#todSheet')?.remove();return}
+  if(e.target.closest('[data-tok]')){const v=parseFloat(($('#todIn').value||'').replace(',','.'));
+    if(!(v>0&&v<=400)){$('#todErr').textContent='Bitte die Meilen bis zum T/D eintragen (1–400).';return}
+    window.EFBApp.send('tod:'+Math.round(v));$('#todSheet')?.remove();return}
   if(e.target.closest('#sbSave')){const v=$('#sbIn').value.trim();if(v){localStorage.setItem('efb.sb',v);loadPlan().then(pull)}}
 });
 async function cycle(){ if(sbName()&&sbName()!==FD.sbLoaded)await loadPlan(); await pull(); }

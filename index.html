@@ -68,6 +68,9 @@ a{color:var(--c)}
 .rbk{font:14px/1.6 "B612 Mono",monospace;color:var(--ink)}
 .rb{display:flex;gap:6px;flex-wrap:wrap}.rb span{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:3px 10px}
 .tiny{font-size:12px;color:var(--dim);margin-top:14px;text-decoration:underline;text-underline-offset:3px}
+.unirow{display:flex;gap:18px;flex-wrap:wrap}.unirow .tiny{margin-top:6px;min-height:32px}
+.uni{border:1px solid var(--line,rgba(255,255,255,.1));border-radius:12px;padding:10px 12px;margin-top:8px}
+.uni b{font-size:13px;color:var(--dim)}.uni .say{font-size:17px;margin:4px 0}.uni small{color:var(--dim);font-size:12px}
 .warnbox{color:var(--a);font-size:13px;margin-top:12px}
 .warnbox button{color:var(--c);text-decoration:underline;margin-left:4px}
 .bar{position:fixed;left:0;right:0;bottom:calc(52px + env(safe-area-inset-bottom));z-index:25;background:var(--bg);border-top:1px solid var(--line);padding:9px 14px}
@@ -307,8 +310,19 @@ function renderVPos(){
 }
 const pre=c=>c.callsign.split('_')[0];
 /* Wer deckt eine Rolle an einem Platz ab (VATSIM top-down) */
+/* Wen nach dem Start rufen? Deutsche VATSIM-ATIS sagen es meist („WHEN PASSING 2000FT CONTACT BREMEN RADAR 120.540“).
+   Gleiche Regel wie bridge.mjs (atisDep) und handy/index.html. */
+function atisDep(icao){
+  icao=(icao||'').toUpperCase();if(!icao)return null;const mine=V.atis.filter(x=>pre(x)===icao);
+  const a=mine.find(x=>/_D_/.test(x.callsign))||mine.find(x=>!/_A_/.test(x.callsign))||mine[0];if(!a)return null;
+  const txt=(a.text_atis||[]).join(' ').toUpperCase().replace(/\s+/g,' ');
+  const m=txt.match(/(?:WHEN (?:AIRBORNE|AIRBORN|PASSING [\d ]+ ?(?:FT|FEET)?)|AFTER (?:DEPARTURE|TAKE ?OFF))[^.]*?CONTACT ([A-Z][A-Z ]*?)\s+(?:ON\s+)?(?:FREQ(?:UENCY)?\s+)?(1[1-3]\d[.,]\d{1,3})/);
+  if(!m)return null;return{cs:a.callsign,name:m[1].trim().toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()),freq:m[2].replace(',','.').padEnd(7,'0').slice(0,7)};
+}
 function cover(role,icao){
   icao=(icao||'').toUpperCase();if(!icao)return null;
+  /* Departure: steht die Station in der ATIS und ist sie besetzt, gilt sie – die Sektor-Schätzung rät bei mehreren Bremen-Sektoren */
+  if(role==='DEP'){const ad=atisDep(icao),on=ad&&V.ctl.find(c=>c.frequency===ad.freq);if(on)return{cs:on.callsign,freq:ad.freq,role:'DEP',spoken:ad.name,covering:false,atis:true}}
   /* Center/FSS über dem Platz: mit Sektordaten genau (Platz liegt im Sektor), sonst grob über die ersten zwei Buchstaben */
   const apos=icao===(F().dep||'').toUpperCase()?F().depPos:icao===(F().arr||'').toUpperCase()?F().arrPos:null;
   const sec=SEC.st==='ok'&&apos?new Set(covers(apos).map(x=>x.cs)):null;
@@ -555,6 +569,29 @@ function atcLine(fp,rq,label){
   const[role,side]=reqRole(fp,q),st=stnCtx(role,side),c=st.c;
   return`<button class="atc" data-gfunk="${esc(fp)}|${esc(rq)}"><span class="atcb">Funk</span><span class="atct"><b>${esc(st.t||st.d)}</b> – ${esc(label)}<small>${c?esc(c.freq)+' · '+esc(c.cs):'Niemand online · Unicom 122.800'}</small></span><span class="atcg">›</span></button>`;
 }
+/* ---------- Unicom / Advisory 122.800 ----------
+   Formulierungen nach dem VATSIM-Blog „S.O.A.R – UNICOM“ (dort als Empfehlung „say something like“, Endanflug als wichtig).
+   Kein offizieller Wortlaut; die VATSIM-Regel B5 verlangt nur: 122.800 hören, wenn nicht unter ATC, und Absichten senden,
+   wenn andere davon profitieren. „Abflug / Steigflug“ ist ein eigener Vorschlag (steht nicht im Blog). */
+const UNI={
+ boden:[{n:'Rollen zur Piste',en:'{apt} traffic, {cs}, taxiing to runway {depRwy} via ____.',de:'Beim Losrollen zur Startbahn, mit der Rollroute.'},
+        {n:'Start',en:'{apt} traffic, {cs}, taking off runway {depRwy}.',de:'Direkt vor dem Aufrollen, wenn du als Erster dran bist.'},
+        {n:'Piste frei',en:'{apt} traffic, {cs}, clear of runway {depRwy}.',de:'Nachdem du eine Piste verlassen hast (z. B. beim Queren).'}],
+ abflug:[{n:'Abflug',en:'{apt} traffic, {cs}, departed runway {depRwy}, climbing ____.',de:'Eigener Vorschlag, nicht aus der VATSIM-Quelle: kurz nach dem Start, mit Höhe.'}],
+ reise:[],
+ anflug:[{n:'Anflug ca. 25 NM',en:'{apt} traffic, {cs}, ____ miles from the field, planning runway {arrRwy}.',de:'Etwa 25 NM vor dem Platz – Meilen einsetzen.'},
+         {n:'Endanflug',en:'{apt} traffic, {cs}, final for runway {arrRwy}.',de:'Im Endanflug – die Quelle nennt diese Meldung ausdrücklich wichtig.'}],
+ landung:[{n:'Piste frei',en:'{apt} traffic, {cs}, clear of runway {arrRwy}.',de:'Nach der Landung, sobald die Piste frei ist.'},
+          {n:'Rollen zum Stand',en:'{apt} traffic, {cs}, taxiing to stand {arrGate} via ____.',de:'Beim Rollen zum Stand.'}]
+};
+function uniBlock(ph,isArr){
+  const apt=(isArr?F().arr:F().dep)||'____',l=UNI[ph]||[];
+  let h=`<p class="lbl">Du sendest (Beispiele)</p>`;
+  h+=l.length?l.map(u=>`<div class="uni"><b>${esc(u.n)}</b><div class="say">${esc(fill(u.en.replace('{apt}',apt)))}</div><small>${esc(u.de)}</small></div>`).join('')
+    :`<p class="sub">Für den Reiseflug gibt es keine Standardmeldung. 122.800 hören, solange du nicht bei einem Lotsen bist.</p>`;
+  h+=`<p class="sub" style="margin-top:12px">Kurz halten, Platzname am Anfang und Ende („… traffic“). Bei „monitor Unicom“ nur hören und nur senden, wenn andere davon profitieren. Formulierungen nach dem VATSIM-Blog, kein offizieller Wortlaut – vor Ort (vACC) können andere Regeln gelten.</p>`;
+  return h;
+}
 function renderFunk(){
   $('#phases').innerHTML=PH.map(([k,n])=>`<button data-ph="${k}" class="${S.phase===k?'act':''}">${n}</button>`).join('');
   const ph=S.phase,reqs=REQ[ph];
@@ -562,15 +599,23 @@ function renderFunk(){
   const[role,side]=reqRole(ph,q);
   const st=stnCtx(role,side);CTX={stn:st};const c=st.c;
   const icao=side==='arr'?F().arr:F().dep;const at=atisOf(icao,side);
-  let h=`<p class="lbl" style="margin-top:0">Jetzt rufen</p><div class="stn-name">${esc(st.t||st.d)}</div>`;
-  h+=c?`<div class="freq">${esc(c.freq)}</div><p class="sub">${esc(c.cs)}${c.covering?' · übernimmt '+esc(role==='DEP'?'Departure':ROLEWORD[role]):''}${at?' · ATIS '+esc(at.code||'?')+' auf '+esc(at.freq):''}</p>`
+  /* Unicom: automatisch, wenn für diese Anfrage niemand online ist; von Hand jederzeit (S.uni) */
+  const uni=!c||!!S.uni, isArr=side==='arr';
+  let h=`<p class="lbl" style="margin-top:0">${uni?'Auf Unicom':'Jetzt rufen'}</p><div class="stn-name">${uni?'Advisory / Unicom':esc(st.t||st.d)}</div>`;
+  if(S.uniPend&&!uni)h+=`<div class="fhint"><span>Vorgemerkt: auf 122.800 wechseln, sobald der Lotse dich entlässt.</span><button class="no" data-q="unipend" aria-label="Vormerkung löschen">×</button></div>`;
+  h+=uni?`<div class="freq off">122.800</div><p class="sub">${c?'Lotse '+esc(c.cs)+' ist noch online – du hast selbst auf Unicom gewechselt':'Niemand online – blind senden, Absichten nennen'}${at?' · ATIS '+esc(at.code||'?'):''}</p>`
+       :c?`<div class="freq">${esc(c.freq)}</div><p class="sub">${esc(c.cs)}${c.covering?' · übernimmt '+esc(role==='DEP'?'Departure':ROLEWORD[role]):''}${at?' · ATIS '+esc(at.code||'?')+' auf '+esc(at.freq):''}</p>`
        :`<div class="freq off">122.800</div><p class="sub">Niemand online – Unicom, Absichten blind senden${at?' · ATIS '+esc(at.code||'?'):''}</p>`;
+  h+=`<div class="unirow"><button class="tiny" data-q="uni">${S.uni?'Zurück zum Lotsen-Funk':'Auf Unicom wechseln'}</button><button class="tiny" data-q="unipend">${S.uniPend?'Vormerkung löschen':'Unicom vormerken'}</button></div>`;
   if(role==='CTR')h+=ctrBlock(st.ci);
+  if(uni){h+=uniBlock(ph,isArr)}
+  else{
   h+=`<div class="${S.sp?'show-sp':''}">`;
   if(q.clr)h+=clrBlock();
   else if(q.init)h+=`<p class="lbl">Du sagst</p>${phrase(INIT[q.init])}<p class="sub" style="margin-top:8px">${esc(TIPS[q.init]||'')}</p>`;
   else h+=`<p class="lbl">Du sagst</p>${phrase(q.you)}<p class="lbl">ATC antwortet meist</p><div class="atcl">${phrase(q.atc)}</div>${rb(q.rb)}`;
   h+=`</div><button class="tiny" data-q="sp">${S.sp?'Aussprache ausblenden':'Aussprache zeigen'}</button>`;
+  }
   h+=`<div class="bar"><div class="reqbar">${reqs.map((r,i)=>`<button class="chip ${i===qi?'on':''}" data-rq="${i}">${esc(r.n)}</button>`).join('')}<span class="sep"></span><button class="chip" data-q="sayagain">Say again</button><button class="chip" data-q="standby">Standby</button><button class="chip" data-q="unable">Unable</button><button class="chip em" data-q="em">Notfall</button></div></div>`;
   $('#funkBody').innerHTML=h;
 }
@@ -1429,6 +1474,8 @@ $('#infoBody').addEventListener('click',e=>{
 const QUICK={sayagain:['Say again','{cs}, say again'],standby:['Standby','Nur sagen, wenn ATC dich ruft und du kurz Zeit brauchst: „{cs}, standby“'],unable:['Unable','{cs}, unable … (Grund), request …'],em:['Notfall','Squawk 7700 Notfall · 7600 Funkausfall · 7500 nur real – auf VATSIM nie. Funk: „Mayday Mayday Mayday, {cs}, …“ oder „Pan-pan Pan-pan Pan-pan, {cs}, …“']};
 function quick(q){
   if(q==='sp'){S.sp=!S.sp;save();renderFunk();return}
+  if(q==='uni'){S.uni=!S.uni;if(S.uni)S.uniPend=false;save();renderFunk();return}
+  if(q==='unipend'){S.uniPend=!S.uniPend;save();renderFunk();return}
   const[t,x]=QUICK[q];ask(t,'',[],0,()=>{});$('#mInput').style.display='none';$('#mOpts').innerHTML=`<div class="say" style="font-size:17px">${esc(x.replace('{cs}',F().cs||'Callsign'))}</div>`;
   const restore=()=>{$('#mInput').style.display=''};setTimeout(()=>{$('#mOk').addEventListener('click',restore,{once:true});$('#mCancel').addEventListener('click',restore,{once:true})},0);
 }

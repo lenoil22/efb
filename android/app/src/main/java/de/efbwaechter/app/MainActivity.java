@@ -184,7 +184,8 @@ public class MainActivity extends Activity {
             boolean ok = c.matches("weg|da|pause|resume|ident")
                     || c.matches("pm:[A-Za-z0-9_]{2,20}:.{1,240}")
                     || c.matches("(atis|metar):[A-Za-z0-9_]{3,12}")
-                    || c.matches("rwy:([0-9]{1,2}[LRC]?|auto)|vapp:([0-9]{3}|auto)");    // Anflug-Monitor
+                    || c.matches("rwy:([0-9]{1,2}[LRC]?|auto)|vapp:([0-9]{3}|auto)")     // Anflug-Monitor
+                    || c.matches("tod:([0-9]{1,3}|auto)");                                // TOD laut FMS
             if (ok) WatchService.sendCmd(MainActivity.this, c);
         }
         /** Anflug-Monitor offen → Bildschirm bleibt an */
