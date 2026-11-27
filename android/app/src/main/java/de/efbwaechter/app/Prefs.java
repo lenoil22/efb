@@ -12,9 +12,9 @@ final class Prefs {
     /** Alarmarten (Tag „efb-<kind>“ von der PC-Bridge) und Standard:
      *  0 = aus, 1 = Nachricht, 2 = Wecker nur im Weg-Modus (sonst Nachricht), 3 = immer Wecker */
     static final String[] KINDS = {"tod", "sector", "warning", "ap", "away", "caution", "pause", "test", "info",
-            "crash", "vatsim", "contact", "fuel", "landing", "atis"};
+            "crash", "vatsim", "contact", "fuel", "landing", "atis", "energy"};
     static final int[] DEF = {2, 2, 2, 2, 3, 1, 1, 1, 0,
-            2, 2, 2, 2, 1, 1};
+            2, 2, 2, 2, 1, 1, 1};                    // energy (Anflug-Monitor): 0 = aus, sonst kurzer Ton
     private static final String MODE_KEY = "m2_";        // neues Schema (v0.2) – alte Einstellungen „mode_“ gelten nicht mehr
 
     private Prefs() {}

@@ -214,6 +214,7 @@ public class WatchService extends Service {
         try {
             if ("alarm".equals(ev)) {
                 JSONObject o = new JSONObject(data);
+                if ("energy".equals(o.optString("kind"))) { energy(o); return; }
                 alarm(o.optString("aid"), o.optLong("t", System.currentTimeMillis()), o.optString("kind", "info"), o.optString("title", "EFB"), o.optString("message", ""), o.optString("from", ""));
             } else if ("status".equals(ev)) {
                 JSONObject s = new JSONObject(data);
@@ -273,6 +274,30 @@ public class WatchService extends Service {
         final String fr = "contact".equals(kind) ? from : "";
         if (mode == 2) main.post(() -> ring(k, title, msg, fr));
         else if (mode == 1) message(title, msg, fr);
+    }
+
+    /* ---------- Anflug-Monitor: kurzer Ton + Vibration (nur WLAN, kommt im selben Moment wie die neue Aktion) ----------
+       Normale Aktion = einmal „Piepser“; Not stabilized / nicht zu schaffen = 3 s „Dringend“ und in den Verlauf. */
+    private MediaPlayer enPlayer;
+    private void energy(JSONObject o) {
+        if (Prefs.mode(this, "energy") == 0) return;
+        if (System.currentTimeMillis() - o.optLong("t", System.currentTimeMillis()) > 10000) return;   // veraltet
+        boolean urgent = o.optInt("priority", 3) >= 5;
+        String title = o.optString("title", "Anflug"), msg = o.optString("message", "");
+        if (urgent) { Prefs.addHistory(this, o.optString("aid"), o.optLong("t"), "energy", title, msg, 1, ""); ui(); }
+        main.post(() -> {
+            try {
+                if (enPlayer != null) { try { enPlayer.release(); } catch (Exception ignored) { } enPlayer = null; }
+                MediaPlayer p = play(this, Uri.parse(Prefs.builtinUri(this, urgent ? "efb_dringend" : "efb_piepser")), urgent);
+                enPlayer = p;
+                if (urgent) main.postDelayed(() -> { if (enPlayer == p) { try { p.stop(); p.release(); } catch (Exception ignored) { } enPlayer = null; } }, 3000);
+                else p.setOnCompletionListener(mp -> { mp.release(); if (enPlayer == mp) enPlayer = null; });
+            } catch (Exception ignored) { }
+            try {
+                getSystemService(Vibrator.class).vibrate(urgent ? VibrationEffect.createWaveform(new long[]{0, 300, 150, 300, 150, 300}, -1)
+                        : VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE));
+            } catch (Exception ignored) { }
+        });
     }
 
     /* ---------- Nachricht ---------- */

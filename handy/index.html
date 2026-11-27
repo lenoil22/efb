@@ -171,6 +171,72 @@ section{animation:in .18s ease-out}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (prefers-reduced-transparency:reduce){.tabs{background:var(--bg);backdrop-filter:none}}
 @media (prefers-reduced-motion:reduce){.sheet{animation:fade .15s ease-out!important}}
+/* ---------- Anflug-Monitor (Vollbild ab Sinkflug, Daten = live.en von der Bridge) ---------- */
+@property --st{syntax:'<color>';inherits:true;initial-value:#3DDC97}
+#mon{--t3:#8F9EB2;--blue:#7AA2FF;--st:var(--green);position:fixed;inset:0;z-index:40;background:#070A0E;container-type:inline-size;display:flex;flex-direction:column;gap:10px;
+  padding:calc(12px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+  box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--st) 55%,transparent),inset 0 0 48px color-mix(in srgb,var(--st) 20%,transparent);transition:--st .6s ease}
+#mon.ok{--st:var(--green)}#mon.amber{--st:var(--amber)}#mon.red,#mon.unable{--st:var(--red)}#mon.blue{--st:var(--blue)}#mon.hold,#mon.wait{--st:var(--t3)}
+#mon .mtop{display:flex;align-items:center;gap:8px;min-height:44px}
+#mon .mapt{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-height:44px;text-align:left}
+#mon .mapt .l{font-size:12px;font-weight:600;color:var(--t3);letter-spacing:.08em}
+#mon .mapt .i{font:700 20px var(--mono);letter-spacing:-.01em;display:flex;align-items:center;gap:4px}
+#mon .mapt .i svg{width:16px;height:16px;color:var(--t3)}
+#mon .mchip{height:26px;padding:0 10px;border-radius:99px;background:var(--s2);color:var(--t2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;white-space:nowrap}
+#mon .mchip.vec{background:rgba(255,181,71,.16);color:var(--amber)}
+#mon .mx{margin-left:auto;width:44px;height:44px;border-radius:50%;background:var(--s1);border:1px solid var(--line);display:grid;place-items:center;color:var(--t2);flex:none;transition:transform .1s ease-out}
+#mon .mx svg{width:18px;height:18px}
+#mon .mprof{flex:1;min-height:230px;position:relative;background:linear-gradient(180deg,#0E141B,#0A0F14);border:1px solid var(--line);border-radius:22px;overflow:hidden}
+#mon .mprof svg.p{position:absolute;inset:0;width:100%;height:100%;display:block}
+#mon .mpills{position:absolute;left:0;right:0;bottom:12px;height:28px}
+#mon .mpill{position:absolute;top:0;height:28px;padding:0 11px;border-radius:14px;display:flex;align-items:center;font:700 12px var(--mono);white-space:nowrap;border:1.4px solid rgba(238,242,247,.26);color:var(--t2);background:rgba(7,10,14,.6)}
+#mon .mpill.done{background:rgba(238,242,247,.08);border-color:transparent;color:var(--t3);padding:0 8px}
+#mon .mpill.next{border-color:var(--cyan);color:var(--cyan);background:rgba(76,201,240,.12)}
+#mon .mpill.due{border-color:var(--cyan);background:var(--cyan);color:#03131B}
+#mon .mpill.due.blk{border-color:var(--amber);background:var(--amber);color:#1A1000}
+#mon .mban{position:absolute;left:12px;top:12px;z-index:2;border-radius:10px;padding:6px 12px;font-weight:800;font-size:13px;letter-spacing:.04em}
+#mon .mban.ga{background:var(--amber);color:#1A1000}#mon .mban.pause{background:var(--s3);color:var(--t1)}
+#mon .mstat{text-align:center}
+#mon .mbig{font-size:clamp(26px,9.4cqi,40px);font-weight:800;letter-spacing:-.025em;line-height:1.05;color:var(--st);text-wrap:balance}
+#mon .mdevs{display:flex;justify-content:center;gap:10px;margin-top:10px}
+#mon .mdv{flex:1;max-width:180px;background:var(--s1);border:1px solid var(--line);border-radius:14px;padding:6px 10px 7px;text-align:center}
+#mon .mdv b{display:block;font-size:12px;font-weight:600;color:var(--t3);letter-spacing:.08em}
+#mon .mdv span{display:block;font:700 clamp(18px,5.4cqi,22px)/1.2 var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+#mon .mcard{min-height:76px;border-radius:18px;display:flex;align-items:center;gap:14px;padding:10px 16px;position:relative;background:rgba(76,201,240,.1);border:1px solid rgba(76,201,240,.45);color:var(--cyan)}
+#mon .mcard svg.ic{width:40px;height:40px;flex:none}
+#mon .mcard .tx small{display:block;font-size:12px;font-weight:700;letter-spacing:.08em}
+#mon .mcard .tx b{display:block;font-size:clamp(19px,6cqi,24px);font-weight:800;letter-spacing:-.015em;color:var(--t1);line-height:1.15}
+#mon .mcard .why{display:block;font-size:13px;color:var(--t1);margin-top:3px;line-height:1.35}
+#mon .mcard.none{background:var(--s1);border-color:var(--line);color:var(--t3)}#mon .mcard.none .tx b{color:var(--t2);font-size:17px;font-weight:600}
+#mon .mcard.urgent{background:rgba(255,93,93,.12);border-color:rgba(255,93,93,.5);color:var(--red)}
+#mon .mcard.gok{background:rgba(61,220,151,.1);border-color:rgba(61,220,151,.45);color:var(--green)}
+#mon .mcard.gbad{background:rgba(255,93,93,.13);border-color:rgba(255,93,93,.55);color:var(--red)}
+#mon .mcard.gok .tx b,#mon .mcard.gbad .tx b{color:inherit}
+#mon .mdone{position:absolute;inset:0;border-radius:inherit;display:flex;align-items:center;justify-content:center;gap:10px;background:#0F1F18;color:var(--green);font-weight:800;font-size:18px;opacity:0;pointer-events:none}
+#mon .mdone svg{width:24px;height:24px}
+#mon .mgrid{display:grid;grid-template-columns:1.2fr 1fr .9fr 1.3fr;gap:2px;background:var(--line);border-radius:18px;overflow:hidden}
+#mon .mgrid>*{background:var(--s1);padding:9px 7px 8px;min-width:0;text-align:left;display:block}
+#mon .mgrid b{display:block;font-size:12px;font-weight:600;color:var(--t3);letter-spacing:.05em;white-space:nowrap}
+#mon .mgrid span{display:block;font:700 clamp(18px,5.4cqi,22px)/1.15 var(--mono);font-variant-numeric:tabular-nums;margin-top:3px;white-space:nowrap}
+#mon .mgrid small{display:block;font:600 12px/1.35 var(--mono);color:var(--t3);white-space:nowrap}
+#mon .c-ok{color:var(--green)}#mon .c-warn{color:var(--amber)}#mon .c-bad{color:var(--red)}#mon .c-n{color:var(--t1)}
+#mon .mwaitbox{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;color:var(--t2);padding:0 20px}
+#mon .mwaitbox b{font-size:22px;color:var(--t1)}
+#mon.wait .mprof,#mon.wait .mstat,#mon.wait .mcard,#mon.wait .mgrid,#mon.wait .mchip{display:none}
+#mon.wait .mwaitbox{display:flex}
+#mon .msheet{position:absolute;left:0;right:0;bottom:0;z-index:3;background:var(--s1);border-top:1px solid var(--line2);border-radius:22px 22px 0 0;padding:14px 16px calc(18px + env(safe-area-inset-bottom))}
+#mon .msheet h3{font-size:13px;font-weight:600;color:var(--t3);letter-spacing:.06em;margin-bottom:10px}
+#mon .msheet .row{display:flex;flex-wrap:wrap;gap:8px}
+#mon .msheet button{min-height:48px;min-width:64px;padding:0 16px;border-radius:14px;border:1px solid var(--line2);font:700 16px var(--mono);color:var(--t1);background:var(--s2)}
+#mon .msheet button.on{border-color:var(--cyan);color:var(--cyan)}
+#mon .mscrim{position:absolute;inset:0;z-index:3;background:rgba(0,0,0,.45)}
+#mon .mapt:active,#mon .mx:active,#mon .mgrid button:active{transform:scale(.97)}
+@media (prefers-reduced-motion:no-preference){#mon .mpill.due{animation:mpulse .7s ease-in-out 3}#mon .mcard.flash{animation:mflash .9s ease-out}#mon .mdone.show{animation:mdone .8s ease-out}}
+@media (prefers-reduced-motion:reduce){#mon{transition:none}}
+@keyframes mpulse{50%{box-shadow:0 0 0 6px rgba(76,201,240,.35);transform:scale(1.06)}}
+@keyframes mflash{0%{background:rgba(76,201,240,.4);box-shadow:0 0 0 4px rgba(76,201,240,.35)}100%{background:rgba(76,201,240,.1);box-shadow:0 0 0 0 rgba(76,201,240,0)}}
+@keyframes mdone{0%{opacity:0}15%{opacity:1}80%{opacity:1}100%{opacity:0}}
+@media (prefers-contrast:more){#mon{--line:rgba(255,255,255,.3);--line2:rgba(255,255,255,.45);--t3:var(--t2)}}
 </style>
 </head>
 <body>
@@ -214,6 +280,7 @@ section{animation:in .18s ease-out}
 
     <div class="sec"><span class="eyebrow">Jetzt</span><span id="fdSrc"></span></div>
     <div class="card" id="fd"><p class="sub">Lädt …</p></div>
+    <button class="ghost" id="monOpen" style="margin-top:10px"><svg style="width:20px;height:20px"><use href="#i-down"/></svg>Anflug-Monitor</button>
 
     <div id="ctlWrap"></div>
 
@@ -248,6 +315,34 @@ section{animation:in .18s ease-out}
   <button class="tab" data-tab="verlauf"><svg><use href="#i-list"/></svg>Verlauf<i class="badge hide" id="badge"></i></button>
 </nav>
 
+<!-- ===================== ANFLUG-MONITOR ===================== -->
+<div id="mon" class="hide" role="dialog" aria-modal="true" aria-label="Anflug-Monitor">
+  <div class="mtop">
+    <button class="mapt" id="mApt" aria-label="Landebahn wechseln"><span class="l">ANFLUG</span><span class="i"><span id="mRwy">–</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></button>
+    <span class="mchip" id="mSrc"></span><span class="mchip" id="mMode"></span>
+    <button class="mx" id="mClose" aria-label="Monitor schließen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="mwaitbox"><b>Wartet auf den Anflug</b><span>Der Monitor startet von selbst ab dem Sinkflug (TOD). Dafür braucht es Live-Daten vom PC im selben WLAN und einen SimBrief-Flug.</span></div>
+  <div class="mprof"><svg class="p" id="mSvg" role="img" aria-label="Seitenprofil des Anflugs"></svg><div class="mpills" id="mPills"></div><div id="mBan"></div></div>
+  <div class="mstat" aria-live="polite"><div class="mbig" id="mLbl"></div>
+    <div class="mdevs"><div class="mdv"><b>HÖHE</b><span id="mDh"></span></div><div class="mdv"><b>SPEED</b><span id="mDs"></span></div></div></div>
+  <div class="mcard" id="mCard"><svg class="ic" id="mIc" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+    <div class="tx"><small id="mCk"></small><b id="mCt"></b><span class="why" id="mCw"></span></div>
+    <div class="mdone" id="mDone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg><span id="mDt"></span></div>
+  </div>
+  <div class="mgrid">
+    <button id="mIasBtn" aria-label="Vapp korrigieren"><b>IAS</b><span id="mIas"></span><small id="mTgt"></small><small id="mVapp"></small></button>
+    <div><b>GS</b><span id="mGs"></span><small>kt</small></div>
+    <div><b>WIND</b><span id="mW"></span><small id="mWs"></small></div>
+    <div><b>V/S</b><span id="mVs"></span><small id="mVsn"></small></div>
+    <div><b>KLAPPEN</b><span id="mF"></span><small id="mFn"></small></div>
+    <div><b>GEAR</b><span id="mG"></span><small>&nbsp;</small></div>
+    <div><b>SPD BRK</b><span id="mSb"></span><small>&nbsp;</small></div>
+    <div><b>DIST</b><span id="mD"></span><small>NM</small></div>
+  </div>
+  <div id="mSheet"></div>
+</div>
+
 <script>
 {
 const $=s=>document.querySelector(s);
@@ -256,15 +351,17 @@ const APP=window.EFBApp||null;
 /* Alarmarten: Name, Symbol, Farbe, Gruppe */
 const KIND={tod:['Top of Descent','i-down','a','Flug'],sector:['Neuer Lotse voraus','i-radio','c','Flug'],away:['Weg-Modus abgelaufen','i-clock','n','Flug'],
   warning:['Master Warning','i-warn','r','Cockpit'],ap:['Autopilot aus','i-plane','r','Cockpit'],caution:['Master Caution','i-warn','a','Cockpit'],pause:['Sim pausiert','i-pause','n','Cockpit'],
-  fuel:['Sprit unter Plan','i-fuel','a','Flug'],landing:['Gelandet (Aufsetzrate)','i-land','g','Flug'],
+  fuel:['Sprit unter Plan','i-fuel','a','Flug'],landing:['Gelandet (Aufsetzrate)','i-land','g','Flug'],energy:['Anflug-Monitor','i-down','c','Flug'],
   crash:['Sim antwortet nicht','i-warn','r','Cockpit'],
   contact:['Lotse schreibt dir','i-chat','c','VATSIM'],vatsim:['Von VATSIM getrennt','i-link','r','VATSIM'],atis:['ATIS & Rückmeldungen','i-cloud','n','VATSIM'],
   test:['Test vom PC','i-info','n','Sonstiges'],info:['Infos (Bridge gestartet …)','i-info','n','Sonstiges']};
-const SUBS={sector:'5 min vorher',away:'nach 25 min',fuel:'gegen SimBrief',crash:'in der Luft, 20 s keine Daten',contact:'Nachricht, SELCAL, Funk-Text an dich',vatsim:'nur in der Luft',atis:'neue ATIS am Ziel, Antworten'};
+const SUBS={energy:'Piepser bei jeder Aktion, laut bei Not stabilized',sector:'5 min vorher',away:'nach 25 min',fuel:'gegen SimBrief',crash:'in der Luft, 20 s keine Daten',contact:'Nachricht, SELCAL, Funk-Text an dich',vatsim:'nur in der Luft',atis:'neue ATIS am Ziel, Antworten'};
 /* Schnell-Antworten an den Lotsen (gleich wie in der App-Benachrichtigung) */
 const QUICK=['Roger','Back at the controls in 2 min','Wilco','Stand by, back in 5 min'];
 /* 2 = Wecker nur im Weg-Modus, sonst Nachricht (am PC hört man es ja selbst) */
 const MODES=[['Aus',''],['Nachricht','Banner und Ton'],['Wecker, wenn weg','sonst Nachricht'],['Immer Wecker','']];
+const EMODES=[['Aus',''],['Kurzer Ton','nur im WLAN mit dem PC']];      // Anflug-Monitor: kein Wecker
+const modesFor=k=>k==='energy'?EMODES:MODES;
 const NTFY='https://ntfy.sh';
 let S={topic:'',modes:{},history:[],status:null,connected:false,fsi:true,battery:true,notif:true,lan:false,logbook:[]};
 let TAB=localStorage.getItem('efb.tab')||'flug',OPEN='',LBOPEN='',SHEET=null,PAUSED=null,SND=null;
@@ -343,10 +440,10 @@ function renderAlarme(){
   if(all)h+=`<div class="sec"><span class="eyebrow">Weckerton</span></div><div class="card list"><button class="it" data-snd="*">${icon('i-music','c')}<div class="tx"><b>Für alle Alarme</b><span>Warnungen haben eigene Töne, wenn du willst</span></div><span class="v">${esc(all.name)}<svg><use href="#i-chev"/></svg></span></button></div>`;
   for(const g of['Flug','Cockpit','VATSIM','Sonstiges']){
     h+=`<div class="sec"><span class="eyebrow">${g}</span></div><div class="card list">`;
-    for(const[k,v]of Object.entries(KIND)){if(v[3]!==g)continue;const m=S.modes[k]??0,open=OPEN===k;
-      h+=`<button class="it${open?' open':''}" data-open="${k}" aria-expanded="${open}">${icon(v[1],v[2])}<div class="tx"><b>${esc(v[0])}</b>${SUBS[k]?`<span>${SUBS[k]}</span>`:''}</div><span class="v${m>=2?' w':''}">${MODES[m][0]}<svg><use href="#i-chev"/></svg></span></button>`;
+    for(const[k,v]of Object.entries(KIND)){if(v[3]!==g)continue;const MO=modesFor(k),m=Math.min(S.modes[k]??0,MO.length-1),open=OPEN===k;
+      h+=`<button class="it${open?' open':''}" data-open="${k}" aria-expanded="${open}">${icon(v[1],v[2])}<div class="tx"><b>${esc(v[0])}</b>${SUBS[k]?`<span>${SUBS[k]}</span>`:''}</div><span class="v${m>=2?' w':''}">${MO[m][0]}<svg><use href="#i-chev"/></svg></span></button>`;
       if(open){const sd=S.sounds&&S.sounds[k];
-        h+=`<div class="pick" role="radiogroup">${MODES.map(([t,d],i)=>`<button class="opt${i===m?' on':''}" role="radio" aria-checked="${i===m}" data-k="${k}" data-m="${i}"><span>${t}${d?`<em>${d}</em>`:''}</span>${i===m?'<svg><use href="#i-check"/></svg>':''}</button>`).join('')}</div>`+
+        h+=`<div class="pick" role="radiogroup">${MO.map(([t,d],i)=>`<button class="opt${i===m?' on':''}" role="radio" aria-checked="${i===m}" data-k="${k}" data-m="${i}"><span>${t}${d?`<em>${d}</em>`:''}</span>${i===m?'<svg><use href="#i-check"/></svg>':''}</button>`).join('')}</div>`+
           (sd&&m>=2?`<div class="pick"><button class="opt" data-snd="${k}"><span>Weckerton<em>${esc(sd.name)} · ${sndHow(k)}</em></span><svg style="color:var(--t3)"><use href="#i-chev"/></svg></button></div>`:'');}
     }
     h+='</div>';
@@ -627,10 +724,23 @@ function render(){
   if(next&&p&&p.groundspeed>80)NEXT.sector={d:next.d,freq:next.freq,m:next.dist/p.groundspeed*60};
   const stn=(cls,lbl,x)=>`<div class="st ${cls}"><small>${lbl}</small><div class="n"><span>${esc(x.d)}</span><span class="f">${esc(x.freq)}</span></div><div class="x">${esc(x.cs)}</div></div>`;
   let h='';
-  if(cur.length)h+=cur.map((x,i)=>stn('now',i?'Auch zuständig':'Jetzt',x)).join('');
+  /* Am Platz zuerst die Platzlotsen (top-down wie auf VATSIM): am Boden beim Abflug DEL → GND → TWR → APP,
+     nach dem Start TWR → APP, im Anflug APP → TWR, nach der Landung GND → TWR. Center erst danach. */
+  const here=p?[p.latitude,p.longitude]:P.depPos,gnd=!p||p.groundspeed<40,dDep=nm(here,P.depPos),dArr=nm(here,P.arrPos);
+  const atDep=dDep!=null&&dDep<10&&(gnd||p.altitude-(P.depElev||0)<3000),atArr=!atDep&&dArr!=null&&dArr<20&&(gnd||p.altitude-(P.arrElev||0)<5000);
+  const loc=atDep?airport(P.dep):atArr?airport(P.arr):null;
+  const order=atDep?(gnd?[2,3,4,5]:[4,5]):gnd?[3,4,5]:[5,4];        // nach der Landung: GND, sonst TWR, sonst APP (macht top-down alles darunter)
+  const lst=loc?order.map(f=>loc.list.find(c=>c.facility===f)).filter(Boolean):[];
+  const FAC={2:'DEL',3:'GND',4:'TWR',5:'APP'},lname=c=>`${ROLE[c.facility]||''} ${loc.icao}`;
+  if(lst.length){
+    h+=stn('now',`Jetzt · ${esc(loc.icao)}${loc.atis?' · ATIS '+esc(loc.atis):''}`,{d:lname(lst[0]),freq:lst[0].frequency,cs:lst[0].callsign});
+    if(lst.length>1)h+=`<div class="st"><small>Danach am Platz</small><div class="dest">${lst.slice(1).map(c=>`<span class="chip">${FAC[c.facility]} <em>${esc(c.frequency)}</em></span>`).join('')}</div></div>`;
+    if(cur.length)h+=stn('',atDep?'Nach dem Start':'Darüber',cur[0]);
+  }
+  else if(cur.length)h+=cur.map((x,i)=>stn('now',i?'Auch zuständig':'Jetzt',x)).join('');
   else h+=`<div class="st now"><small>Jetzt</small><div class="n"><span>Kein Center online</span><span class="f" style="color:var(--t2)">122.800</span></div><div class="x">Unicom</div></div>`;
-  if(next){const when=NEXT.sector?inMin(NEXT.sector.m)+' · ':'';h+=stn('next',`${when}${next.dist>0?'in '+Math.round(next.dist)+' NM · ':''}ab ${esc(next.at)}`,next)}
-  const ap=airport(P.arr);
+  if(next&&!atArr){const when=NEXT.sector?inMin(NEXT.sector.m)+' · ':'';h+=stn('next',`${when}${next.dist>0?'in '+Math.round(next.dist)+' NM · ':''}ab ${esc(next.at)}`,next)}
+  const ap=atArr?null:airport(P.arr);
   if(ap)h+=`<div class="st"><small>Ziel ${esc(ap.icao)}${ap.atis?' · ATIS '+esc(ap.atis):''}</small>${ap.list.length?`<div class="dest">${ap.list.map(c=>`<span class="chip">${({2:'DEL',3:'GND',4:'TWR',5:'APP'})[c.facility]||''} <em>${esc(c.frequency)}</em></span>`).join('')}</div>`:'<div class="x">Niemand online – Unicom 122.800</div>'}</div>`;
   atc.innerHTML=h;
   window.efbAwayNext();
@@ -649,6 +759,164 @@ async function cycle(){ if(sbName()&&sbName()!==FD.sbLoaded)await loadPlan(); aw
 loadSectors();
 setTimeout(()=>{cycle();setInterval(cycle,15000)},800);   // kurz warten, bis der Status (SimBrief-Name) da ist
 setInterval(loadPlan,10*60000);
+}
+</script>
+
+<script>
+/* ===================== Anflug-Monitor =====================
+   Die Rechnung macht die PC-Bridge (makeEnergy), sie schickt jede Sekunde live.en. Hier nur Darstellung:
+   Ampel-Korridor (nur Höhe), Spur, Vorhersage, Flugzeug, Gate, Pillen, Status, Aktion, Werte.
+   Öffnet von selbst, sobald en kommt (ab Sinkflug), schließt nach der Landung. Ton spielt die App selbst. */
+{
+const $=s=>document.querySelector(s),APP=window.EFBApp||null,M=$('#mon'),RM=matchMedia('(prefers-reduced-motion: reduce)');
+const SRC={plan:'Plan',atis:'ATIS',manual:'von Hand',apt:'Flughafen'},MODE={route:'Route',vectors:'Vectors',final:'Final'};
+const sg=(n,u)=>(n>0?'+':n<0?'−':'±')+Math.abs(n)+(u?' '+u:'');
+const hwG=d=>100+36*d,hwY=d=>250+90*d,ideal=d=>50+d*318;                 // Korridor-Halbbreiten in ft, zur Bahn hin schmaler
+const band=(dev,d)=>Math.abs(dev)<=hwG(d)?'c-ok':Math.abs(dev)<=hwY(d)?'c-warn':'c-bad';
+const rateNm=v=>-(v.vs||0)*60/Math.max(v.gs||0,60);
+const IC={sb:'<path d="M3 27C9 22 20 21 37 25"/><path d="M3 27C12 29 26 29 37 25"/><path d="M15 23.5L22 13h3l-4 9.6"/><path d="M26 8v5M22.5 10.5l3.5 2.5 3.5-2.5"/>',
+  sbin:'<path d="M3 27C9 22 20 21 37 25"/><path d="M3 27C12 29 26 29 37 25"/><path d="M16 23h9"/><path d="M26 13v-5M22.5 10.5l3.5-2.5 3.5 2.5"/>',
+  gear:'<path d="M20 5v16"/><path d="M14 9h12"/><circle cx="20" cy="28" r="7"/><circle cx="20" cy="28" r="2.2"/>',
+  flaps:'<path d="M3 18C10 13 22 12 30 15"/><path d="M3 18C12 21 22 21 30 15"/><path d="M30 15l7 9"/><path d="M28 20l6 8"/>',
+  route:'<circle cx="20" cy="20" r="11" stroke-dasharray="4 4"/><path d="M20 4v6M31 9l-4 4"/><path d="M14 20h12M22 16l4 4-4 4"/>',
+  thrust:'<path d="M14 32V12M26 32V12"/><path d="M10 16l4-6 4 6M22 16l4-6 4 6"/>',
+  speed:'<path d="M7 28a14 14 0 1 1 26 0"/><path d="M20 26l7-9"/><circle cx="20" cy="26" r="2"/>',
+  ok:'<circle cx="20" cy="20" r="14"/><path d="M13 20.5l5 5L28 15"/>',ga:'<path d="M8 30L30 8"/><path d="M18 8h12v12"/>',idle:'<circle cx="20" cy="20" r="14"/><path d="M14 20h12"/>'};
+const icon=t=>/Speedbrake rein/.test(t)?IC.sbin:/Speedbrake/.test(t)?IC.sb:/Gear/.test(t)?IC.gear:/Flaps/.test(t)?IC.flaps:/Track|Orbit/.test(t)?IC.route:/Höhe|Schub/.test(t)?IC.thrust:IC.speed;
+const PN={f1:'F1',f2:'F2',gear:'GEAR',f3:'F3',full:'FULL'};
+let V=null,track=[],disp=null,last=0,open=false,dismissed=false,manual=false,noLive=false,prevAct=null,prevGate=null;
+
+function show(on){
+  if(open===on)return;open=on;M.classList.toggle('hide',!on);document.documentElement.style.overflow=on?'hidden':'';
+  try{APP&&APP.keepAwake&&APP.keepAwake(on)}catch(e){}
+  if(on){disp=null;last=0;requestAnimationFrame(frame)}else{$('#mSheet').innerHTML=''}
+}
+function liveEn(){let L=null;try{const s=APP&&APP.live?APP.live():'';L=s?JSON.parse(s):null;if(L&&Date.now()-L.t>5000)L=null}catch(e){L=null}return L}
+/* jede Sekunde (von der App) + alle 2 s als Wache */
+function tick(){
+  const L=liveEn(),en=L&&L.en&&L.en.on?L.en:null;noLive=!L;
+  if(en){
+    let lt=track[track.length-1];
+    if(!V||lt&&(en.d>lt[0]+2||Math.abs(en.aal-lt[1])>2500)){track=[];lt=null}   // neuer Anflug, Go-around oder Bahnwechsel → Spur neu
+if(!lt||Math.abs(lt[0]-en.d)>0.05)track.push([en.d,en.aal]);if(track.length>400)track.shift();
+    setView(en);if(!open&&!dismissed)show(true);
+  }else if(L&&V){                                                    // Daten kommen, aber kein Anflug mehr → gelandet
+    V=null;track=[];dismissed=false;prevAct=null;prevGate=null;if(open&&!manual)show(false);
+  }
+  M.classList.toggle('wait',!V);
+  banner();
+}
+const prevLive=window.efbLive;window.efbLive=()=>{try{prevLive&&prevLive()}catch(e){}tick()};
+setInterval(tick,2000);
+
+function banner(){
+  const b=$('#mBan');if(!open)return;
+  const h=noLive&&V?'<div class="mban pause">Keine Live-Daten vom PC</div>':V&&V.ga?'<div class="mban ga">GO-AROUND</div>':V&&V.paused?'<div class="mban pause">Sim pausiert</div>':'';
+  if(b.innerHTML!==h)b.innerHTML=h;
+}
+
+/* weich nachgeführt: Flugzeug gleitet, Zoom gleitet */
+function target(v){let rng=v.d<=12?15:v.d<=26?30:60;if(v.d>rng-2)rng=Math.min(80,Math.ceil((v.d+4)/10)*10);
+  return{d:v.d,aal:v.aal,rate:rateNm(v),rng,top:Math.max(ideal(rng)+hwY(rng)*1.1,v.aal+700)}}
+function frame(t){
+  if(!open)return;requestAnimationFrame(frame);if(!V)return;
+  const T=target(V),dt=Math.min(.1,last?(t-last)/1000:0);last=t;
+  if(!disp||RM.matches)disp={...T};else{const k=1-Math.exp(-dt/.35);for(const n in T)disp[n]+=(T[n]-disp[n])*k}
+  draw();
+}
+function draw(){
+  const svg=$('#mSvg'),W=svg.clientWidth,H=svg.clientHeight;if(!W||!H)return;
+  const{d,aal,rate,rng,top}=disp,v=V,F='font-family="B612 Mono,monospace" font-size="12"';
+  const L=40,R=12,TOP=34,G=H-62,span=rng*1.07,x=dd=>L+(rng-dd)/span*(W-L-R),y=h=>TOP+(1-h/top)*(G-TOP);
+  const st=getComputedStyle(M).getPropertyValue('--st').trim()||'#3DDC97';
+  let s=`<defs><clipPath id="mPlot"><rect x="${L}" y="0" width="${x(0)-L}" height="${G}"/></clipPath><filter id="mGl" x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="5"/></filter>
+    <linearGradient id="mGnd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#18212B"/><stop offset="1" stop-color="#0A0F14"/></linearGradient></defs>`;
+  const hs=top>16000?5000:top>7000?2000:1000;
+  for(let h=hs;h<top;h+=hs)s+=`<line x1="${L}" x2="${x(0)}" y1="${y(h)}" y2="${y(h)}" stroke="rgba(255,255,255,.05)"/><text x="${L-6}" y="${y(h)+4}" ${F} fill="#8F9EB2" text-anchor="end">${h/1000}k</text>`;
+  const poly=hw=>`${x(rng)},${y(ideal(rng)+hw(rng))} ${x(0)},${y(50+hw(0))} ${x(0)},${y(50-hw(0))} ${x(rng)},${y(ideal(rng)-hw(rng))}`;
+  s+=`<g clip-path="url(#mPlot)"><rect x="${L}" y="${TOP-20}" width="${x(0)-L}" height="${G}" fill="rgba(255,93,93,.07)"/><polygon points="${poly(hwY)}" fill="rgba(255,181,71,.13)"/><polygon points="${poly(hwG)}" fill="rgba(61,220,151,.18)"/>
+    <line x1="${x(rng)}" y1="${y(ideal(rng))}" x2="${x(0)}" y2="${y(50)}" stroke="#3DDC97" stroke-opacity=".7" stroke-width="1.4" stroke-dasharray="6 5"/></g>`;
+  const gx=x(v.gateNm),gc=v.gate?(v.gate.ok?'#3DDC97':'#FF5D5D'):'#EEF2F7';
+  s+=`<line x1="${gx}" y1="${TOP-6}" x2="${gx}" y2="${G}" stroke="${gc}" stroke-opacity=".4"/><rect x="${gx-22}" y="${TOP-24}" width="44" height="19" rx="5" fill="#151D26" stroke="${gc}" stroke-opacity=".5"/>
+    <text x="${gx}" y="${TOP-10.5}" ${F} font-weight="700" fill="${gc}" text-anchor="middle">GATE</text><path d="M${gx} ${y(1000)-6}l6 6-6 6-6-6z" fill="#070A0E" stroke="${gc}" stroke-width="1.6"/>`;
+  const rx0=x(0),rx1=x(-.06*rng);
+  s+=`<rect x="0" y="${G}" width="${W}" height="${H-G}" fill="url(#mGnd)"/><line x1="0" y1="${G}" x2="${W}" y2="${G}" stroke="rgba(255,255,255,.14)"/>
+    <rect x="${rx0}" y="${G-2.5}" width="${rx1-rx0}" height="5" rx="1" fill="#C9D3DE"/><line x1="${rx0+3}" y1="${G}" x2="${rx1-3}" y2="${G}" stroke="#0A0F14" stroke-dasharray="3 2"/>
+    <text x="${(rx0+rx1)/2}" y="${G-9}" ${F} font-weight="700" fill="#EEF2F7" text-anchor="middle">${v.src==='apt'?'':String(v.rwy).replace(/[<&]/g,'')}</text>`;
+  const step=rng<=15?5:rng<=30?10:20;
+  for(let k=0;k<=rng;k+=step)s+=`<text x="${x(k)}" y="${G+17}" ${F} fill="#8F9EB2" text-anchor="middle">${k}${k===0?' NM':''}</text>`;
+  const pts=track.filter(p=>p[0]<=rng*1.02&&p[0]>d).map(p=>`${x(p[0])},${y(p[1])}`);pts.push(`${x(d)},${y(aal)}`);
+  if(pts.length>1)s+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${st}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-opacity=".85" clip-path="url(#mPlot)"/>`;
+  const hThr=aal-rate*d;let ex,ey,txt;
+  if(rate>1&&hThr<0){const dg=d-aal/rate;ex=x(dg);ey=y(0);txt=`Boden ${dg.toFixed(1)} NM vor der Bahn`}
+  else{ex=x(0);ey=y(Math.max(0,hThr));const over=Math.round((hThr-50)/100)*100;txt=Math.abs(over)<100?'trifft die Schwelle':`${sg(over,'ft')} an der Schwelle`}
+  if(!v.gate||aal>1200){
+    s+=`<line x1="${x(d)}" y1="${y(aal)}" x2="${ex}" y2="${ey}" stroke="${st}" stroke-width="2" stroke-dasharray="3 6" stroke-linecap="round"/><circle cx="${ex}" cy="${ey}" r="4" fill="#070A0E" stroke="${st}" stroke-width="1.6"/>`;
+    s+=`<text x="${Math.min(ex-8,W-R-4)}" y="${Math.max(TOP+14,Math.min(ey-10,G-24))}" ${F} font-weight="700" fill="${st}" text-anchor="end" paint-order="stroke" stroke="#0A0F14" stroke-width="4">${txt}</text>`;
+  }
+  const ang=Math.max(-20,Math.min(45,Math.atan2(rate*(G-TOP)/top,(W-L-R)/span)*180/Math.PI)),ax=x(d),ay=y(aal);
+  s+=`<circle cx="${ax}" cy="${ay}" r="15" fill="${st}" opacity=".5" filter="url(#mGl)"/><g transform="translate(${ax} ${ay}) rotate(${ang}) scale(1.15)" fill="#EEF2F7">
+    <path d="M-17,-2.2 L11,-2.2 Q16.5,-2.2 18.5,0 Q16.5,2.4 11,2.4 L-15,2.4 Q-17.5,2.2 -18,0 Z"/><path d="M-17.5,-1.8 L-21,-10 L-16.8,-10 L-11,-2 Z"/><path d="M-18.5,-0.6 L-23,-0.6 L-22,1.2 L-17,1.2 Z"/>
+    <rect x="-1.5" y="2.2" width="8" height="3.4" rx="1.7" fill="#A9B6C6"/><path d="M-5,1.4 L4,1.4 L0,3.6 L-7,3.6 Z" fill="#A9B6C6"/></g>`;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.innerHTML=s;
+  pills(x,8,W-8);
+}
+/* Pillen: an ihrer Distanz; erst nach rechts ausweichen, dann von rechts in den Rahmen zurück */
+function pills(x,minX,maxX){
+  const box=$('#mPills'),v=V,GAP=6,next=v.markers.find(m=>!m.done),P=[];
+  for(const m of v.markers){
+    let el=box.querySelector(`[data-m="${m.id}"]`);if(!el){el=document.createElement('div');el.dataset.m=m.id;box.append(el)}
+    const due=!m.done&&v.d<=m.d+.3,cls='mpill'+(m.done?' done':due?' due'+(m.blocked?' blk':''):m===next?' next':'');
+    if(el.className!==cls)el.className=cls;const t=(m.done?'✓ ':'')+PN[m.id];if(el.textContent!==t)el.textContent=t;
+    const w=el.offsetWidth;P.push({el,w,left:x(Math.max(0,Math.min(disp.rng,m.d)))-w/2});
+  }
+  let e=minX-GAP;for(const p of P){p.left=Math.max(p.left,e+GAP);e=p.left+p.w}
+  e=maxX+GAP;for(let k=P.length-1;k>=0;k--){const p=P[k];p.left=Math.min(p.left,e-GAP-p.w);e=p.left}
+  for(const p of P)p.el.style.left=Math.max(4,p.left)+'px';
+}
+function setView(v){
+  for(const c of['ok','amber','red','unable','blue','hold'])M.classList.toggle(c,c===v.state);   // „hide“/„wait“ bleiben unberührt
+  const set=(id,t,c)=>{const e=$(id);if(e.textContent!==String(t))e.textContent=t;if(c!==undefined&&e.className!==c)e.className=c};
+  set('#mRwy',[v.apt,v.src==='apt'?'':v.rwy].filter(Boolean).join(' ')||'–');set('#mSrc',SRC[v.src]||'');set('#mMode',MODE[v.mode]||'',v.mode==='vectors'?'mchip vec':'mchip');
+  set('#mLbl',v.label);
+  const dk=v.ias-v.tgt,spc=Math.abs(dk)<=5?'c-ok':Math.abs(dk)<=10?'c-warn':'c-bad';
+  set('#mDh',sg(v.devFt,'ft')+(v.devFt>50?' ↑':v.devFt<-50?' ↓':''),band(v.devFt,v.d));set('#mDs',sg(dk,'kt'),spc);
+  const card=$('#mCard'),act=v.gate?null:v.act||'';
+  if(v.gate){card.className='mcard '+(v.gate.ok?'gok':'gbad');$('#mIc').innerHTML=v.gate.ok?IC.ok:IC.ga;set('#mCk','1000-FT-GATE');set('#mCt',v.gate.ok?'Stabilized':'GO AROUND');set('#mCw',v.gate.ok?'Konfiguration, Speed, Sinkrate und Pfad im Rahmen':v.gate.why.join(' · '))}
+  else if(act){card.className='mcard'+(v.state==='unable'?' urgent':'')+(card.classList.contains('flash')?' flash':'');$('#mIc').innerHTML=icon(act);set('#mCk','JETZT');set('#mCt',act);set('#mCw','')}
+  else{card.className='mcard none';$('#mIc').innerHTML=IC.idle;set('#mCk','');set('#mCt','Nichts zu tun');set('#mCw','')}
+  if(prevAct!==null&&!v.gate&&act!==prevAct){                       // neue Aktion leuchtet auf (gleichzeitig piept die App), erledigte wird abgehakt
+    if(prevAct){$('#mDt').textContent=prevAct;const dn=$('#mDone');dn.classList.remove('show');void dn.offsetWidth;dn.classList.add('show')}
+    if(act){card.classList.remove('flash');void card.offsetWidth;card.classList.add('flash')}
+  }
+  prevAct=act;prevGate=v.gate;
+  const atGate=v.aal<=1200||!!v.gate,landCfg=v.flaps==='FULL'||v.flaps==='3';
+  set('#mIas',v.ias,spc);set('#mTgt','Ziel '+v.tgt);set('#mVapp','Vapp '+(v.vappEst?'≈':'')+v.vapp);
+  set('#mGs',v.gs,'c-n');set('#mW',Math.abs(v.tail),v.tail>10?'c-warn':'c-n');set('#mWs',v.tail>0?'Rücken':v.tail<0?'Gegen':'still');
+  const vd=Math.abs(v.vs-v.needVs);set('#mVs',sg(v.vs).replace('±',''),atGate?(v.vs<-1000?'c-bad':'c-ok'):vd<=300?'c-ok':vd<=600?'c-warn':'c-bad');set('#mVsn',atGate?'max −1000':'soll '+sg(v.needVs).replace('±',''));
+  const nx=v.markers.find(m=>!m.done&&m.id!=='gear');
+  set('#mF',v.flaps,landCfg?'c-ok':atGate?'c-bad':'c-n');set('#mFn',nx?'dann '+{f1:'1',f2:'2',f3:'3',full:'FULL'}[nx.id]:'fertig');
+  set('#mG',v.gear?'DOWN':'UP',v.gear?'c-ok':atGate?'c-bad':'c-n');set('#mSb',v.spdbrk>=.9?'FULL':v.spdbrk>0?'HALB':'RET',v.spdbrk>0?'c-warn':'c-n');set('#mD',v.d.toFixed(1),'c-n');
+  V=v;
+}
+/* Bahn / Vapp von Hand (geht als Befehl an die Bridge) */
+function sheet(kind){
+  if(!V||!APP)return;const v=V;let h='';
+  if(kind==='rwy'){const l=(v.rwys||[]).filter((r,i,a)=>a.indexOf(r)===i);
+    h=`<h3>LANDEBAHN ${esc(v.apt||'')}</h3><div class="row"><button data-c="rwy:auto" class="${v.src!=='manual'?'on':''}">Auto</button>${l.map(r=>`<button data-c="rwy:${esc(r)}" class="${v.src==='manual'&&v.rwy===r?'on':''}">${esc(r)}</button>`).join('')}</div>`}
+  else{const b=Math.round(v.vapp/5)*5,l=[b-10,b-5,b,b+5,b+10];
+    h=`<h3>VAPP (aus dem MCDU)</h3><div class="row"><button data-c="vapp:auto" class="${v.vappEst?'on':''}">Auto ≈</button>${l.map(n=>`<button data-c="vapp:${n}" class="${!v.vappEst&&v.vapp===n?'on':''}">${n}</button>`).join('')}</div>`}
+  $('#mSheet').innerHTML=`<div class="mscrim" data-c="x"></div><div class="msheet" role="dialog" aria-modal="true">${h}</div>`;
+}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+M.addEventListener('click',e=>{
+  let b;
+  if(e.target.closest('#mClose')){show(false);if(V)dismissed=true;manual=false;return}
+  if(e.target.closest('#mApt'))return sheet('rwy');
+  if(e.target.closest('#mIasBtn'))return sheet('vapp');
+  if(b=e.target.closest('[data-c]')){const c=b.dataset.c;$('#mSheet').innerHTML='';if(c!=='x'&&APP)try{APP.send(c)}catch(err){}}
+});
+document.addEventListener('click',e=>{if(e.target.closest('#monOpen')){manual=true;dismissed=false;tick();show(true)}});
 }
 </script>
 </body>

@@ -671,8 +671,8 @@ PM|PARKING BRAKE|ON · BRAKE PRESS CHECK
 ~^PM|EMERGENCY EQUIPMENT|CHECK on board
 ~^PM|CIRCUIT BREAKERS|CHECK (overhead + rear)
 ^PM|GEAR PINS & COVERS|CHECK on board & stowed
-PM|EFB – Ground Services|AS DESIRED|[Fenix] Boarding, Catering, Fuel
-PM|EFB – Mass & Balance|LOAD AIRCRAFT|[Fenix] Ggf. vorher SimBrief importieren`},
+PM|EFB – Mass & Balance|SIMBRIEF IMPORT|[Fenix] Plan laden; ohne GSX hier LOAD AIRCRAFT
+PM|EFB – Ground Services|BOARDING & FUEL START|[Fenix/GSX] Läuft im Hintergrund (ca. 15–25 min) – du machst parallel weiter`},
 
 {id:'walk',n:'Exterior Walkaround',f:'boden',t:'Optional – im Sim meist übersprungen',opt:1,s:`
 ~^PM|Linker Bug|AOA probes, static ports, Oxygen-Discharge grün
@@ -713,7 +713,7 @@ PF|OXYGEN CREW SUPPLY|ON
 ~^PF|AUDIO SWITCHING|NORM
 ~^PF|MAINT / VENT panel|CHECK all lights off`},
 
-{id:'ped',n:'Cockpit Preparation – Pedestal & MCDU',f:'boden',t:'Nach Overhead-Scan',s:`
+{id:'ped',n:'Cockpit Preparation – Pedestal & MCDU',f:'boden',t:'Nach Overhead-Scan – Boarding läuft noch',s:`
 ~^PF|ISIS / STBY instrument|CHECK no flags
 ~PF|CLOCK|CHECK / SET
 PF|A/SKID & N/W STRG|ON
@@ -726,23 +726,20 @@ PF|PARKING BRAKE|CHECK ON · ACCU / BRAKE PRESS CHECK
 PF|ATC (Transponder)|STBY · ALT RPTG ON · SYS 1
 PF|RMP|ON · Frequenzen SET|VHF1 ATC, VHF2 ATIS
 PF|MCDU INIT A|INIT REQUEST|SimBrief-Plan laden; FLT NBR {cs}, Cost Index, CRZ FL {crz}
-PF|MCDU F-PLN – DEPARTURE|RWY {depRwy} · SID {sid}|Am Abflugplatz-LSK → DEPARTURE → TMPY INSERT
+PF|MCDU F-PLN – DEPARTURE|ERWARTET: RWY {depRwy} · SID {sid}|Wie echt: erwartete SID aus Flugplan/ATIS vorläufig eintragen, nach der Clearance prüfen. Abflugplatz-LSK → DEPARTURE → TMPY INSERT
 PF|MCDU F-PLN|CHECK route, DISCONTINUITIES löschen|Mit CLR
 ~^PF|MCDU F-PLN|CHECK DIST TO DEST vs. Flugplan
 ~^PF|MCDU RAD NAV|CHECK
-PF|MCDU INIT B / Fuel|ZFW, ZFWCG, BLOCK {fuel}|[Fenix] Werte aus EFB Mass & Balance; oder FUEL PLANNING
-PF|EFB Departure Perf|CALCULATE|[Fenix] Airport, Runway, Wetter, Loadsheet-Sync
-PF|MCDU PERF TAKEOFF|V1 / VR / V2 {vspeeds}|Dazu FLAPS/THS {flaps}, FLEX TEMP
-PF|MCDU PERF TAKEOFF|THR RED / ACC · TRANS ALT {ta}|Üblich: THR RED 1000 ft, ACC 1000–3000 ft AAL
-~^PF|MCDU SEC F-PLN|AS RQRD`},
+PF|MCDU PERF TAKEOFF|THR RED / ACC · TRANS ALT {ta}|Üblich: THR RED 1000 ft, ACC 1000–3000 ft AAL. V-Speeds erst nach dem Boarding
+~^PF|MCDU SEC F-PLN|AS RQRD
+PF|MCDU INIT B · PERF TO|SPÄTER|Gewichte gibt es erst nach dem Boarding → Phase „Loadsheet & Takeoff Performance“`},
 
-{id:'glare',n:'Cockpit Preparation – Glareshield & Final',f:'boden',t:'MCDU fertig',s:`
+{id:'glare',n:'Cockpit Preparation – Glareshield & Clearance',f:'boden',t:'MCDU vorbereitet – Boarding darf noch laufen',s:`
 CM|BARO REF (EFIS + ISIS)|SET QNH {qnhDep}|Unterschied PFD Captain/FO max. 20 ft
 CM|FD|CHECK ON
 CM|LS / ND MODE & RANGE|AS RQRD
 PF|FCU SPD|CHECK DASHED
 PF|FCU HDG|CHECK DASHED · HDG V/S
-PF|FCU ALT|SET initial cleared altitude
 ~^CM|OXYGEN MASK TEST|PERFORM|Crew supply ON, Test-Knopf drücken, Blinker gelb→schwarz
 ~^CM|PFD / ND brightness|AS RQRD
 ~^CM|LOUDSPEAKER|SET (ca. 1 Uhr)
@@ -756,9 +753,19 @@ PM|ATIS {dep}|LISTEN · Information {atisDep}, QNH {qnhDep}|Vor dem Delivery-Anr
 @PF|Request ATC clearance, please.
 PM|ATC CLEARANCE|OBTAIN|SID, Squawk, Höhe in MCDU/FCU übernehmen
 PF|Squawk|SET {squawk}|Aus der Clearance, am Transponder eintippen
-^PM|MCDU F-PLN / FCU ALT|CHECK gegen Clearance`},
+PF|MCDU F-PLN – DEPARTURE|CHECK / ÄNDERN gegen Clearance|Andere SID oder Piste? Jetzt im MCDU korrigieren (TMPY INSERT)
+PF|FCU ALT|SET initial cleared altitude|Aus der Clearance`},
 
-{id:'brief',n:'Takeoff Briefing',f:'boden',t:'Cockpit fertig vorbereitet',s:`
+{id:'load',n:'Loadsheet & Takeoff Performance',f:'boden',t:'Boarding und Tanken fertig (GSX / Fenix-EFB)',s:`
+PM|EFB – Ground Services|CHECK Boarding & Fuel complete|[Fenix/GSX] Erst hier weiter, wenn alles geladen ist
+CM|FINAL LOADSHEET|RECEIVED · ZFW / ZFWCG / TOW|[Fenix] EFB Mass & Balance
+CM|FUEL ON BOARD|CHECK {fuel} (ECAM vs. Plan)
+PF|MCDU INIT B / Fuel|ZFW, ZFWCG, BLOCK {fuel}|Werte aus dem Final Loadsheet; [Fenix] auch per EFB an das MCDU senden
+PF|EFB Departure Perf|CALCULATE|[Fenix] Airport, Runway (nach Clearance), Wetter, Loadsheet-Sync
+PF|MCDU PERF TAKEOFF|V1 / VR / V2 {vspeeds}|Dazu FLAPS/THS {flaps}, FLEX TEMP
+^PF|FMS TAKEOFF DATA|CROSS CHECK|PF: PERF TO page · PM: F-PLN page`},
+
+{id:'brief',n:'Takeoff Briefing',f:'boden',t:'Performance fertig',s:`
 @PF|Takeoff briefing.
 PF|Aircraft & Status|Technischer Zustand, MEL, Fuel {fuel}
 PF|Weather & NOTAMs|Wind, Piste {depRwy}, ATIS {atisDep}, QNH {qnhDep}
@@ -769,13 +776,10 @@ PF|Rejected Takeoff|Unter 100 kt: Abbruch bei jeder Warnung. 100 kt bis V1: nur 
 PF|Engine Failure after V1|Keine Aktion unter 400 ft außer Gear up; EO-Prozedur / Acceleration altitude
 @PM|Briefing understood.`},
 
-{id:'bpush',n:'Before Pushback or Start',f:'boden',t:'Boarding fertig, Türen gleich zu',s:`
+{id:'bpush',n:'Before Pushback or Start',f:'boden',t:'Briefing fertig, Türen gleich zu',s:`
 PF|EFB Ground Services|Doors close, Stairs/GPU remove|[Fenix]
 ^CM|SEATING POSITION|ADJUST
 ^CM|FINAL LOADSHEET|CHECK · ZFW / ZFWCG gegen MCDU
-^CM|FUEL ON BOARD|CHECK {fuel} (ECAM vs. Plan)
-^PF|FMS TAKEOFF DATA|CROSS CHECK
-^PF|MCDU|PF: PERF TO page · PM: F-PLN page
 ^PM|EXT PWR|CHECK OFF / disconnected
 @PF|Before start checklist, down to the line.
 #bs:down`},
@@ -995,7 +999,6 @@ PM|SEAT BELTS|AS RQRD`},
 @PF|Ten thousand feet checks.
 @PM|Ten thousand feet.
 PM|LANDING LIGHTS|ON
-PM|NOSE light|T.O
 PM|SEAT BELTS|ON
 CM|EFIS|CSTR
 CM|LS pb|ON for ILS
@@ -1255,7 +1258,7 @@ const pkey=()=>S.set.mode==='guided'?'p':'c';
    Ist der Funk weiter als die Checkliste, zeigt die Checkliste nur einen Hinweis (Sprung per Tipp).
    Rückwärts im Funk (Clearance noch mal ansehen …) ändert an der Checkliste nie etwas. */
 const FQ={
- prelim:'boden:Clearance',walk:'boden:Clearance',ovhd:'boden:Clearance',ped:'boden:Clearance',glare:'boden:Clearance',brief:'boden:Clearance',
+ prelim:'boden:Clearance',walk:'boden:Clearance',ovhd:'boden:Clearance',ped:'boden:Clearance',glare:'boden:Clearance',load:'boden:Clearance',brief:'boden:Clearance',
  bpush:'boden:Pushback',startclr:'boden:Pushback',eng:'boden:Pushback',after:'boden:Taxi',taxi:'boden:Taxi',lineup:'boden:Ready for departure',
  tko:'abflug:Erstanruf Departure',atko:'abflug:Erstanruf Departure',ta:'abflug:Höher steigen',climb10:'abflug:Höher steigen',
  cruise:'reise:Erstanruf Center',dprep:'reise:Sinkflug anfragen',tod:'reise:Sinkflug anfragen',

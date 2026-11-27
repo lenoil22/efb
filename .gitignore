@@ -1,8 +1,10 @@
 # Bridge: privater ntfy-Kanal, lokale Diagnose und gebaute Dateien – nie ins öffentliche Repo
 bridge/config.json
 bridge/lvars-gefunden.txt
+bridge/anflug-werte.txt
 bridge/bridge.log
 bridge/vatspy-cache/
+bridge/runway-cache/
 bridge/logbook.json
 bridge/vpilot/*.dll
 bridge/EFB-Bridge.exe

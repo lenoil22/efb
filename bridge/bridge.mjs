@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const CFG_FILE = path.join(DIR, 'config.json');
 const LVAR_FILE = path.join(DIR, 'lvars-gefunden.txt');
+const ANF_FILE = path.join(DIR, 'anflug-werte.txt');   // Rohwerte für den Anflug-Monitor (Prüfung am Sim, danach löschbar)
 
 export const DEFAULTS = {
   ntfyServer: 'https://ntfy.sh',
@@ -51,6 +52,169 @@ export function nm(lat1, lon1, lat2, lon2) {
   const r = x => x * Math.PI / 180, R = 3440.065;
   const h = Math.sin(r(lat2 - lat1) / 2) ** 2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(r(lon2 - lon1) / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
+}
+export function brg(lat1, lon1, lat2, lon2) {
+  const r = x => x * Math.PI / 180;
+  const y = Math.sin(r(lon2 - lon1)) * Math.cos(r(lat2));
+  const x = Math.cos(r(lat1)) * Math.sin(r(lat2)) - Math.sin(r(lat1)) * Math.cos(r(lat2)) * Math.cos(r(lon2 - lon1));
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+export const destPt = (lat, lon, hdg, d) => { const h = hdg * Math.PI / 180; return [lat + d * Math.cos(h) / 60, lon + d * Math.sin(h) / (60 * Math.cos(lat * Math.PI / 180))]; };
+const adiff = (a, b) => ((a - b) % 360 + 540) % 360 - 180;
+function crossTrack(p, a, b) {
+  const R = 3440.065, d13 = nm(a[0], a[1], p[0], p[1]) / R;
+  const t = (brg(a[0], a[1], p[0], p[1]) - brg(a[0], a[1], b[0], b[1])) * Math.PI / 180;
+  return Math.abs(Math.asin(Math.sin(d13) * Math.sin(t)) * R);
+}
+
+/* ---------- Anflug-Monitor: Energie-Rechnung (ohne Netz, testbar) ----------
+   Faustregeln, keine Airbus-Performance-Daten:
+   3°-Pfad = 318 ft/NM · 10 kt über der normalen Geschwindigkeit ≈ 1 NM · 10 kt Rückenwind ≈ 1 NM.
+   Mit Speedbrake + Gear lassen sich pro geflogener NM etwa 0,7 NM Überschuss abbauen (→ „nicht zu schaffen“). */
+export const FT_NM = 318, GATE_FT = 1000;
+export const GATE_NM = (GATE_FT - 50) / FT_NM;            // ≈ 3 NM vor der Schwelle
+export const VFE = [Infinity, 230, 200, 185, 177];        // Klappenhebel 0, 1, 2, 3, FULL
+const VLO = 250, FLAPN = ['0', '1', '2', '3', 'FULL'];
+const MK = [{ id: 'f1', n: 'Flaps 1', d: 13, lv: 1 }, { id: 'f2', n: 'Flaps 2', d: 8, lv: 2 }, { id: 'gear', n: 'Gear down', d: 6.5 }, { id: 'f3', n: 'Flaps 3', d: 5, lv: 3 }, { id: 'full', n: 'Flaps full', d: 4, lv: 4 }];
+
+/* Vapp ≈ VLS CONF FULL (grob aus dem Gewicht) + Wind-Zuschlag (⅓ Gegenwind, 5–15 kt) */
+export function vappEstimate(weightKg, headKt = 0) {
+  const T = [[45, 112], [50, 117], [55, 122], [60, 127], [65, 132], [70, 137], [75, 142]];
+  const w = Math.min(75, Math.max(45, (weightKg || 60000) / 1000));
+  let i = 0; while (i < T.length - 2 && w > T[i + 1][0]) i++;
+  const vls = T[i][1] + (T[i + 1][1] - T[i][1]) * (w - T[i][0]) / (T[i + 1][0] - T[i][0]);
+  return Math.round(vls + Math.min(15, Math.max(5, headKt / 3)));
+}
+/* Übliche Geschwindigkeit an diesem Punkt des Anflugs (d = NM bis zur Schwelle) */
+export function speedTarget(d, altFt, vapp) {
+  if (d > 30) return altFt > 10500 ? 290 : 250;
+  const P = [[GATE_NM, vapp], [5, vapp + 10], [7, 160], [10, 185], [13, 210], [20, 230], [30, 250]];
+  if (d <= P[0][0]) return vapp;
+  let i = 0; while (d > P[i + 1][0]) i++;
+  return Math.round(P[i][1] + (P[i + 1][1] - P[i][1]) * (d - P[i][0]) / (P[i + 1][0] - P[i][0]));
+}
+/* Distanz zur Schwelle: im Endanflug Luftlinie, auf der Route entlang der Wegpunkte, sonst Vectors
+   (über einen Punkt auf der verlängerten Bahnachse, 4–10 NM vor der Schwelle) */
+export function approachDist(me, plan, rwy) {
+  const thr = [rwy.lat, rwy.lon], direct = nm(me[0], me[1], thr[0], thr[1]);
+  const off = rwy.hdg == null ? 0 : Math.abs(adiff(brg(thr[0], thr[1], me[0], me[1]), (rwy.hdg + 180) % 360));
+  if (rwy.hdg != null && direct < 2) return { d: Math.max(0, direct * Math.cos(off * Math.PI / 180)), mode: 'final' };   // über/hinter der Schwelle → 0, nicht „Vectors“
+  if (direct < 12 && off < 25) return { d: direct, mode: 'final' };
+  const W = plan?.wps || [];
+  if (W.length >= 2) {
+    let bi = 0, bd = 1e9; W.forEach((w, i) => { const x = nm(me[0], me[1], w[0], w[1]); if (x < bd) { bd = x; bi = i; } });
+    let nx = bi; if (bi < W.length - 1 && nm(me[0], me[1], W[bi + 1][0], W[bi + 1][1]) < nm(W[bi][0], W[bi][1], W[bi + 1][0], W[bi + 1][1])) nx = bi + 1;
+    const b = W[nx], last = W[W.length - 1];
+    const prev = W[W.length - 2], past = nx === W.length - 1 && nm(prev[0], prev[1], me[0], me[1]) > nm(prev[0], prev[1], last[0], last[1]);
+    if (past && off < 25) return { d: direct, mode: 'final' };   // letzter Routenpunkt hinter uns, auf der Achse
+    const xt = nx > 0 ? crossTrack(me, W[nx - 1], b) : bd;
+    if (!past && xt <= 3) return { d: nm(me[0], me[1], b[0], b[1]) + (last[3] - b[3]) + nm(last[0], last[1], thr[0], thr[1]), mode: 'route' };
+  }
+  if (rwy.hdg == null) return { d: direct, mode: 'vectors' };
+  const fd = Math.min(10, Math.max(4, direct * 0.6)), F = destPt(thr[0], thr[1], (rwy.hdg + 180) % 360, fd);
+  return { d: nm(me[0], me[1], F[0], F[1]) + fd, mode: 'vectors' };
+}
+
+/* update(st, ctx) jede Sekunde. st: lat, lon, altFt, iasKt, gsKt, vsFpm, hdg, windDir, windKt, flaps (0–4), gear, spdbrk (0–1),
+   weightKg, onGround, paused. ctx: plan, rwy {id, lat, lon, elev, hdg, src}, vapp (von Hand), todPassed.
+   Gibt { view, events } zurück: view geht live ans Handy, events = Töne (level short | urgent). */
+export function makeEnergy({ now = () => Date.now() } = {}) {
+  const fresh = () => ({ on: false, desc: 0, landed: 0, gate: null, minAal: 1e9, prevAal: null, said: {}, cand: null, candT: 0, hist: [], ga: 0, last: null });
+  let S = fresh();
+  const r1 = x => Math.round(x * 10) / 10;
+  function update(st, ctx = {}) {
+    const t = now(), ev = [], rwy = ctx.rwy;
+    if (st.lat == null || !rwy) return { view: { on: false }, events: ev };
+    if (S.on && st.paused && S.last) return { view: { ...S.last, paused: true }, events: ev };
+    const dist = approachDist([st.lat, st.lon], ctx.plan, rwy), d = dist.d;
+    if (!S.on) {
+      if (!st.onGround && d <= 150) {
+        S.desc = st.vsFpm < -500 ? (S.desc || t) : 0;
+        if (ctx.todPassed || (S.desc && t - S.desc >= 30000)) S.on = true;
+      }
+      if (!S.on) return { view: { on: false }, events: ev };
+    }
+    if (st.onGround) { S.landed = S.landed || t; if (t - S.landed > 30000) { S = fresh(); return { view: { on: false, landed: true }, events: ev }; } } else S.landed = 0;
+
+    const elev = rwy.elev ?? ctx.plan?.arrElev ?? 0, aal = st.altFt - elev;
+    const ideal = elev + 50 + d * FT_NM, devFt = st.altFt - ideal;
+    const head = (st.windKt || 0) * Math.cos(((st.windDir || 0) - (st.hdg || 0)) * Math.PI / 180), tail = -head;
+    const vapp = ctx.vapp || vappEstimate(st.weightKg, Math.max(0, head));
+    const tgt = speedTarget(d, st.altFt, vapp);
+    const hNm = devFt / FT_NM, sNm = (st.iasKt - tgt) / 10, wNm = tail / 10, excess = hNm + sNm + wNm;
+    const cap = Math.max(0, d - GATE_NM) * 0.7 + 0.5;
+
+    /* Holding: 4 min lang kaum näher gekommen */
+    S.hist.push([t, d]); while (S.hist.length && t - S.hist[0][0] > 360000) S.hist.shift();
+    const holding = !st.onGround && d > 10 && t - S.hist[0][0] >= 240000 && S.hist[0][1] - d < 2;
+    /* Go-around: unter 2000 ft (oder nach dem Gate) wieder deutlich gestiegen */
+    if (S.gate || aal < 2000) S.minAal = Math.min(S.minAal, aal);
+    if (!st.onGround && st.vsFpm > 500 && aal > S.minAal + 300) { S.gate = null; S.minAal = 1e9; S.said = {}; S.ga = t; }
+
+    let state, label;
+    const high = hNm > 1, fast = sNm + wNm > 1;
+    if (holding) state = 'hold';
+    else if (excess > 2 && excess > cap) state = 'unable';
+    else if (excess > 5) state = 'red';
+    else if (excess > 2) state = 'amber';
+    else if (excess < -2) state = 'blue';
+    else state = 'ok';
+    const what = high && fast ? 'HIGH & HOT' : hNm >= sNm + wNm ? 'ZU HOCH' : 'ZU SCHNELL';
+    label = { hold: 'HOLDING', unable: 'NICHT ZU SCHAFFEN', red: what, amber: 'ETWAS ' + (high && fast ? 'HOCH & SCHNELL' : what.replace('ZU ', '')), blue: devFt < -FT_NM ? 'ZU TIEF' : 'ZU LANGSAM', ok: 'AUF PROFIL' }[state];
+
+    /* Marker: spätester Punkt für die Konfiguration, rückt bei Überschuss nach vorn */
+    const shift = Math.max(0, excess);
+    const markers = MK.map(m => ({ id: m.id, n: m.n, d: r1(Math.min(25, m.d + shift)), done: m.id === 'gear' ? !!st.gear : st.flaps >= m.lv, blocked: m.id === 'gear' ? st.iasKt > VLO : st.iasKt > VFE[m.lv] }));
+
+    /* Eine Aktion */
+    let act = null;
+    if (aal > GATE_FT && !st.onGround && state !== 'hold') {
+      const nf = Math.min(4, (st.flaps || 0) + 1);
+      if (state === 'unable') act = { id: 'tm', t: 'Mehr Track Miles / Orbit anfragen' };
+      else if (state === 'red' || state === 'amber') {
+        const full = state === 'red';
+        if (st.flaps < 3 && (st.spdbrk || 0) < (full ? 0.9 : 0.4)) act = { id: full ? 'sb-full' : 'sb-half', t: full ? 'Speedbrake voll' : 'Speedbrake halb' };
+        else if (full && !st.gear && st.iasKt <= VLO && d < 15) act = { id: 'gear-brake', t: 'Gear down jetzt (als Bremse)' };
+        else if (st.flaps < 4 && st.iasKt <= VFE[nf] - 3) act = { id: 'f' + nf, t: 'Flaps ' + FLAPN[nf] };
+        else act = { id: 'decel', t: 'Früher verzögern' };
+      } else if ((st.spdbrk || 0) > 0.1 && (excess < 0.5 || st.flaps >= 3)) act = { id: 'sb-in', t: 'Speedbrake rein' };
+      else if (state === 'blue') act = devFt < -FT_NM ? { id: 'low', t: 'Höhe halten / Schub' } : { id: 'slow', t: 'Speed halten' };
+      else { const m = markers.find(x => !x.done && d <= x.d + 0.3); if (m) act = m.blocked ? { id: m.id, t: `${m.n} – erst unter ${m.id === 'gear' ? VLO : VFE[MK.find(k => k.id === m.id).lv]} kt` } : { id: m.id, t: m.n }; }
+    }
+    /* Ton: Aktion 3 s stabil → einmal; erst wieder, wenn sie 30 s weg war */
+    const aid = act?.id || null;
+    if (aid !== S.cand) { S.cand = aid; S.candT = t; }
+    if (aid && t - S.candT >= 3000) { if (!S.said[aid]) ev.push({ id: aid, level: aid === 'tm' ? 'urgent' : 'short', text: act.t }); S.said[aid] = t; }
+    for (const k of Object.keys(S.said)) if (k !== aid && t - S.said[k] > 30000) delete S.said[k];
+
+    /* 1000-ft-Gate (einmal beim Durchsinken) */
+    if (!S.gate && !st.onGround && S.prevAal != null && S.prevAal > GATE_FT && aal <= GATE_FT) {
+      const why = [];
+      if (!st.gear) why.push('Gear nicht unten');
+      if (st.flaps < 3) why.push('Klappen ' + FLAPN[st.flaps || 0]);
+      if (st.iasKt > vapp + 10) why.push(`${Math.round(st.iasKt - vapp)} kt zu schnell`); else if (st.iasKt < vapp - 5) why.push(`${Math.round(vapp - st.iasKt)} kt zu langsam`);
+      if (st.vsFpm < -1000) why.push(`Sinkrate ${Math.round(-st.vsFpm)} fpm`);
+      if (Math.abs(devFt) > 150) why.push(devFt > 0 ? `${Math.round(devFt)} ft über dem Pfad` : `${Math.round(-devFt)} ft unter dem Pfad`);
+      S.gate = { ok: !why.length, why };
+      if (why.length) ev.push({ id: 'gate-fail', level: 'urgent', text: 'Not stabilized – go around', why });
+    }
+    S.prevAal = aal;
+
+    /* Unter dem Gate ist das Gate-Ergebnis die Hauptanzeige */
+    if (S.gate && aal <= GATE_FT + 200) { state = S.gate.ok ? 'ok' : 'red'; label = S.gate.ok ? 'STABILIZED' : 'NOT STABILIZED'; }
+    const gs = Math.max(st.gsKt || 0, 60);
+    const needVs = d > GATE_NM ? -(st.altFt - (elev + GATE_FT)) / ((d - GATE_NM) / gs * 60) : -gs * FT_NM / 60;
+    const view = {
+      on: true, rwy: rwy.id || '', src: rwy.src || '', mode: dist.mode, d: r1(d), elev: Math.round(elev), alt: Math.round(st.altFt), aal: Math.round(aal),
+      ideal: Math.round(ideal), devFt: Math.round(devFt), ias: Math.round(st.iasKt), tgt, gs: Math.round(st.gsKt || 0), vs: Math.round(st.vsFpm || 0),
+      needVs: Math.round(needVs / 50) * 50, tail: Math.round(tail), flaps: FLAPN[st.flaps || 0], gear: !!st.gear, spdbrk: r1(st.spdbrk || 0),
+      vapp, vappEst: !ctx.vapp, excess: r1(excess), state, label, act: act ? act.t : '', markers, gateNm: r1(GATE_NM),
+      gate: S.gate, ga: S.ga && t - S.ga < 30000, trend: [r1(d - gs / 60), Math.round(st.altFt + (st.vsFpm || 0))], paused: false
+    };
+    S.last = view;
+    return { view, events: ev };
+  }
+  return { update, reset: () => { S = fresh(); }, get on() { return S.on; } };
 }
 
 /* ---------- ntfy: senden + Befehle vom Handy empfangen ---------- */
@@ -305,7 +469,9 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
     }
     st.sectorStarted = true;      // beim ersten Durchlauf schon bekannte Lotsen nicht melden
   }
-  return { st, offsets, vars, tick, cmd, setTod, sector };
+  /* Anflug-Monitor: umgerechnete Zusatzwerte (Gruppe „anf“) */
+  function anf(d) { Object.assign(st, anfConvert(d)); }
+  return { st, offsets, vars, tick, cmd, setTod, sector, anf };
 }
 
 /* ---------- Logbuch: Off-Block, Start, Landung (Aufsetzrate + G), On-Block ----------
@@ -362,7 +528,9 @@ export async function loadTod(user, fetchImpl = fetch) {
     flight: `${j.atc?.callsign || ''} ${j.origin?.icao_code || ''} → ${j.destination?.icao_code || ''}`.trim(), tod: t ? [+t.pos_lat, +t.pos_long] : null, wps,
     total: cum || null, todCum, crz: +(g.initial_altitude || 0), arrElev: +(j.destination?.elevation || 0),
     cs: (j.atc?.callsign || ((g.icao_airline || '') + (g.flight_number || ''))).toUpperCase(), type: j.aircraft?.icaocode || '',
-    dep: j.origin?.icao_code || '', arr: j.destination?.icao_code || '', units: String(j.params?.units || 'kgs').toLowerCase()
+    dep: j.origin?.icao_code || '', arr: j.destination?.icao_code || '', units: String(j.params?.units || 'kgs').toLowerCase(),
+    arrRwy: String(j.destination?.plan_rwy || '').toUpperCase(),
+    arrPos: j.destination?.pos_lat ? [+j.destination.pos_lat, +j.destination.pos_long] : null
   };
 }
 
@@ -394,6 +562,58 @@ export function atisInfo(atisList, icao) {
   const rws = [...new Set([...txt.matchAll(/(?:RUNWAY|RWY)S?\s*(?:IN USE\s*)?(?:FOR\s+(?:LANDING|ARRIVAL)S?\s*)?((?:\d{2}\s?[LRC]?\b(?:\s*(?:AND|,|\/)?\s*)?)+)/gi)].flatMap(m => [...m[1].matchAll(/\d{2}\s?[LRC]?/g)].map(r => r[0].replace(/\s/g, '').toUpperCase())))];
   const q = txt.match(/QNH\s*(\d{3,4})/i) || txt.match(/\bQ(\d{4})\b/);
   return { cs: a.callsign, code: a.atis_code || '', rws, qnh: q ? q[1] : '', freq: a.frequency };
+}
+
+/* ---------- Landebahnen (OurAirports, gemeinfrei) für den Anflug-Monitor ----------
+   runways.csv (~4 MB) einmal laden, 30 Tage auf der Platte. Pro Flughafen nur bei Bedarf ausgewertet. */
+const RWY_URL = 'https://davidmegginson.github.io/ourairports-data/runways.csv';
+export function makeRunways({ cacheDir = path.join(DIR, 'runway-cache'), fetchImpl = fetch } = {}) {
+  let csv = null; const byApt = {};
+  async function load() {
+    const f = path.join(cacheDir, 'runways.csv');
+    try { if (Date.now() - fs.statSync(f).mtimeMs < 30 * 864e5) { csv = fs.readFileSync(f, 'utf8'); return; } } catch { }
+    const r = await fetchImpl(RWY_URL); if (!r.ok) throw new Error('runways.csv ' + r.status);
+    csv = await r.text();
+    try { fs.mkdirSync(cacheDir, { recursive: true }); fs.writeFileSync(f, csv); } catch { }
+  }
+  /* Schwelle eines Bahnendes; versetzte Schwelle (displaced) wird entlang der Bahn nach innen verschoben */
+  const end = (id, lat, lon, elev, hdg, disp, len) => {
+    if (!id || lat === '' || lon === '') return null;
+    let la = +lat, lo = +lon; const d = (+disp || 0) / 6076.12;   // ft → NM
+    if (d > 0 && hdg !== '') { const h = +hdg * Math.PI / 180; la += d * Math.cos(h) / 60; lo += d * Math.sin(h) / (60 * Math.cos(la * Math.PI / 180)); }
+    return { id: id.toUpperCase(), lat: la, lon: lo, elev: elev === '' ? null : +elev, hdg: hdg === '' ? null : +hdg, lenFt: +len || null };
+  };
+  function airport(icao) {
+    icao = (icao || '').toUpperCase(); if (!csv || !icao) return [];
+    if (byApt[icao]) return byApt[icao];
+    const out = [], key = `,"${icao}",`;
+    let i = csv.indexOf(key);
+    while (i >= 0) {
+      const s = csv.lastIndexOf('\n', i) + 1, e = csv.indexOf('\n', i);
+      const p = csv.slice(s, e < 0 ? undefined : e).replace(/\r$/, '').split(',').map(x => x.replace(/^"|"$/g, ''));
+      // id, airport_ref, ident, length, width, surface, lighted, closed, le_ident, le_lat, le_lon, le_elev, le_hdg, le_disp, he_ident, he_lat, he_lon, he_elev, he_hdg, he_disp
+      if (p[2] === icao && p[7] !== '1') {
+        const a = end(p[8], p[9], p[10], p[11], p[12], p[13], p[3]), b = end(p[14], p[15], p[16], p[17], p[18], p[19], p[3]);
+        if (a) out.push(a); if (b) out.push(b);
+      }
+      i = csv.indexOf(key, i + key.length);
+    }
+    return (byApt[icao] = out);
+  }
+  const norm = r => String(r || '').toUpperCase().replace(/^RW/, '').replace(/^(\d)([LRC]?)$/, '0$1$2');
+  const lookup = (icao, rwy) => airport(icao).find(r => r.id === norm(rwy)) || null;
+  return { load, airport, lookup, get ok() { return !!csv; } };
+}
+
+/* Welche Bahn gilt? Von Hand gewählt > ATIS (geplante Bahn nicht aktiv → erste aktive) > SimBrief-Plan.
+   src sagt, woher sie kommt (für die Anzeige im Monitor). */
+export function pickRunway(rw, icao, planned, atis, manual) {
+  const list = rw.airport(icao); if (!list.length) return null;
+  if (manual) { const m = rw.lookup(icao, manual); if (m) return { ...m, src: 'manual' }; }
+  const act = (atis?.rws || []).map(r => rw.lookup(icao, r)).filter(Boolean);
+  const p = planned ? rw.lookup(icao, planned) : null;
+  if (act.length && !(p && act.some(a => a.id === p.id))) return { ...act[0], src: 'atis' };
+  return p ? { ...p, src: 'plan' } : act[0] ? { ...act[0], src: 'atis' } : null;
 }
 
 /* ---------- Sektoren (VATSpy) + Online-Lotsen: „In X min neuer Lotse“ ----------
@@ -474,6 +694,41 @@ const OFFSETS = [
   { name: 'fuel', address: 0x126C, type: 'uint', size: 4 }     // Sprit gesamt in lbs
 ];
 const CTL = [{ name: 'pause', address: 0x0262, type: 'uint', size: 2 }];   // 1 = Pause an, 0 = aus (schreiben)
+/* Anflug-Monitor, Schritt 1: Adressen teils aus dem Gedächtnis – nur Rohwerte, noch nicht umgerechnet.
+   Eigene Gruppe „anf“, damit ein falscher Offset nicht die Hauptdaten (pos) kaputt macht. */
+const ANF = [
+  { name: 'ias', address: 0x02BC, type: 'uint', size: 4 },       // IAS × 128 (vermutlich)
+  { name: 'hdg', address: 0x0580, type: 'uint', size: 4 },       // Kurs (wahr?) – prüfen
+  { name: 'windSpd', address: 0x0E90, type: 'uint', size: 2 },   // Wind kt (vermutlich)
+  { name: 'windDir', address: 0x0E92, type: 'uint', size: 2 },   // Windrichtung – prüfen
+  { name: 'flapLever', address: 0x0BDC, type: 'uint', size: 2 }, // Klappenhebel – prüfen (Fenix evtl. nicht)
+  { name: 'gearLever', address: 0x0BE8, type: 'uint', size: 2 }, // Fahrwerkshebel – prüfen
+  { name: 'spdbrk', address: 0x0BD0, type: 'uint', size: 2 },    // Speedbrake – prüfen
+  { name: 'radAlt', address: 0x31E4, type: 'uint', size: 4 },    // Radarhöhe – prüfen
+  { name: 'gross', address: 0x30C0, type: 'float', size: 8 }     // Gewicht in lbs (Gleitkomma) – prüfen
+];
+/* Umrechnung der Rohwerte – Faktoren aus der FSUIPC-Offset-Liste (aus dem Gedächtnis, beim ersten Anflug
+   mit anflug-werte.txt gegen die Cockpit-Anzeige prüfen). Fehlt ein Wert, bleibt das Feld weg. */
+export function anfConvert(d) {
+  const o = {}, ok = x => x != null && Number.isFinite(+x);
+  if (ok(d.ias)) o.iasKt = d.ias / 128;
+  if (ok(d.hdg)) o.hdg = (d.hdg * 360 / 4294967296 + 360) % 360;
+  if (ok(d.windSpd)) o.windKt = +d.windSpd;
+  if (ok(d.windDir)) o.windDir = (d.windDir * 360 / 65536 + 360) % 360;
+  if (ok(d.flapLever)) o.flaps = Math.max(0, Math.min(4, Math.round(d.flapLever / 4096)));      // 0 / 1 / 2 / 3 / FULL
+  if (ok(d.gearLever)) o.gear = d.gearLever > 8000;
+  if (ok(d.spdbrk)) o.spdbrk = d.spdbrk <= 4800 ? 0 : Math.min(1, (d.spdbrk - 4800) / (16383 - 4800));   // 4800 = armed
+  if (ok(d.radAlt)) o.raFt = d.radAlt / 65536 * 3.28084;
+  if (ok(d.gross) && d.gross > 1000) o.weightKg = d.gross * 0.453592;
+  return o;
+}
+let anfLast = 0;
+function writeAnflug(d) {
+  if (Date.now() - anfLast < 2000) return;   // höchstens alle 2 s schreiben
+  anfLast = Date.now();
+  const lines = ANF.map(o => `  ${o.name.padEnd(10)} ${String(d[o.name]).padStart(10)}   (0x${o.address.toString(16).toUpperCase()})`);
+  try { fs.writeFileSync(ANF_FILE, `Rohwerte ${new Date().toLocaleString('de-DE')}\n\n${lines.join('\n')}\n`); } catch { }
+}
 export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
   let ws = null, names = null, declared = false, waitLogged = false, warned = false;
   const state = { ws: false, sim: false, fenix: false };
@@ -484,7 +739,9 @@ export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
     'offsets.read': () => send({ command: 'offsets.read', name: 'pos', interval: 500 }),
     'vars.list': () => send({ command: 'vars.list', name: 'list', notify: 'auto' }),
     'vars.declare': () => send({ command: 'vars.declare', name: 'fenix', vars: Object.values(names).filter(Boolean).map(n => ({ name: n })) }),
-    'vars.read': () => send({ command: 'vars.read', name: 'fenix', interval: 250 })
+    'vars.read': () => send({ command: 'vars.read', name: 'fenix', interval: 250 }),
+    'anf.declare': () => send({ command: 'offsets.declare', name: 'anf', offsets: ANF }),
+    'anf.read': () => send({ command: 'offsets.read', name: 'anf', interval: 1000 })
   };
   const later = c => { if (retry[c]) return; retry[c] = setTimeout(() => { retry[c] = null; cmds[c](); }, 10000); };
   function onMsg(r) {
@@ -500,11 +757,15 @@ export function connectSim(cfg, mon, WS = globalThis.WebSocket) {
     }
     switch (r.command) {
       case 'about.read': if (r.data) log(`FSUIPC ${r.data.FSUIPCVersion || '?'} · Server ${r.data.FSUIPCWebSocketServerVersion || '?'} · Sim ${r.data.isConnectionOpen ? 'verbunden' : 'noch nicht verbunden'}`); break;
-      case 'offsets.declare': if (r.name === 'pos') cmds['offsets.read'](); break;
+      case 'offsets.declare':
+        if (r.name === 'pos') { cmds['offsets.read'](); cmds['anf.declare'](); }   // anf hängt an pos: kommt der Sim später, wird es mit neu angemeldet
+        else if (r.name === 'anf') cmds['anf.read']();
+        break;
       case 'offsets.read': if (r.data && r.name === 'pos') {
         if (!state.sim) { send({ command: 'about.read', name: 'about' }); if (!declared) cmds['vars.list'](); }   // Sim gerade verbunden
         state.sim = true; if (waitLogged) { log('Sim verbunden.'); waitLogged = false; } mon.offsets(r.data);
-      } break;
+      } else if (r.data && r.name === 'anf') { writeAnflug(r.data); mon.anf?.(r.data); }
+        break;
       case 'vars.list': {
         const list = r.data?.lvars || [];
         const picked = pickLvars(list, cfg.lvars);
@@ -587,7 +848,11 @@ async function main() {
     }
     else if (lc.startsWith('atis:')) { const icao = c.slice(5).trim().toUpperCase(); needVp(); lan.vpilot({ cmd: 'atis', station: atisInfo(atisList, icao)?.cs || icao + '_ATIS' }); }
     else if (lc.startsWith('metar:')) { needVp(); lan.vpilot({ cmd: 'metar', station: c.slice(6).trim().toUpperCase() }); }
+    /* Anflug-Monitor: Bahn / Vapp von Hand („auto“ = wieder automatisch) */
+    else if (lc.startsWith('rwy:')) { const r = c.slice(4).trim().toUpperCase(); enHand.rwy = /^\d{1,2}[LRC]?$/.test(r) ? r : null; log(`Anflug-Bahn: ${enHand.rwy || 'automatisch'}`); }
+    else if (lc.startsWith('vapp:')) { const n = parseInt(c.slice(5), 10); enHand.vapp = n >= 100 && n <= 180 ? n : null; log(`Vapp: ${enHand.vapp || 'geschätzt'}`); }
   }
+  const enHand = { rwy: null, vapp: null };
   /* Ereignisse vom vPilot-Plugin: Nachrichten, SELCAL, Verbindung, ATIS/METAR-Antworten */
   function onVpilot(e) {
     const me = (vp.cs || plan?.cs || '').toUpperCase();
@@ -612,13 +877,28 @@ async function main() {
   const lan = makeLan(cfg, { onCmd: handleCmd, onVpilot, getLogbook: () => book.list() });
   mon = makeMonitor({ cfg, notify });
   setInterval(() => { mon.tick(); book.update(mon.st); }, 1000);
+  /* Anflug-Monitor: Landebahnen (OurAirports) + Energie-Rechnung. Töne nur über WLAN – ntfy hat ein Tageslimit. */
+  const rw = makeRunways();
+  rw.load().then(() => log('Landebahnen (OurAirports) geladen.')).catch(e => log('Landebahnen nicht geladen:', e.message));
+  const en = makeEnergy();
+  const lanAlarm = n => lan.alarm({ aid: crypto.randomBytes(5).toString('hex'), kind: n.kind, title: n.title, message: n.message || '', priority: n.priority || 3, t: Date.now(), from: '' });
+  function energy(s, a) {
+    if (!plan?.arr) return null;
+    let rwy = rw.ok ? pickRunway(rw, plan.arr, plan.arrRwy, atisInfo(atisList, plan.arr), enHand.rwy) : null;
+    if (!rwy && plan.arrPos) rwy = { id: plan.arr, lat: plan.arrPos[0], lon: plan.arrPos[1], elev: plan.arrElev, hdg: null, src: 'apt' };   // Bahn unbekannt → Flughafen-Mittelpunkt
+    const st = { ...s, iasKt: s.iasKt ?? s.gsKt, flaps: s.flaps ?? 0, gear: !!s.gear, spdbrk: s.spdbrk ?? 0 };
+    const r = en.update(st, { plan, rwy, vapp: enHand.vapp, todPassed: !!(a && a.dT != null && a.dT < 0) });
+    for (const e of r.events) lanAlarm({ kind: 'energy', title: e.level === 'urgent' ? e.text : 'Anflug: ' + e.text, message: e.why ? e.why.join(' · ') : '', priority: e.level === 'urgent' ? 5 : 3 });
+    return r.view.on ? { ...r.view, apt: plan.arr, rwys: rw.ok ? rw.airport(plan.arr).map(x => x.id) : [], ias0: s.iasKt == null } : null;
+  }
   /* Live-Daten aus dem Sim jede Sekunde – nur über WLAN (ntfy hat ein Tageslimit). Mit TOD/ETA entlang der Route. */
   setInterval(() => {
     const s = mon.st; if (s.lat == null) return;
     const a = plan ? along([s.lat, s.lon], plan) : null, gs = s.gsKt;
     const mins = d => d != null && gs > 80 ? Math.round(d / gs * 60) : null;
+    let ev = null; try { ev = energy(s, a); } catch (e) { log('Anflug-Monitor:', e.message); }
     lan.live({ lat: s.lat, lon: s.lon, alt: Math.round(s.altFt), gs: Math.round(gs), vs: s.vsFpm ?? null, gnd: s.onGround, paused: s.paused, ap: !!(s.ap1 || s.ap2),
-      dA: a ? Math.round(a.dA) : null, etaMin: mins(a?.dA), todMin: a && a.dT > 1 ? mins(a.dT) : null, todNm: a && a.dT > 1 ? Math.round(a.dT) : null, t: Date.now() });
+      dA: a ? Math.round(a.dA) : null, etaMin: mins(a?.dA), todMin: a && a.dT > 1 ? mins(a.dT) : null, todNm: a && a.dT > 1 ? Math.round(a.dT) : null, en: ev, t: Date.now() });
   }, 1000);
   ntfy.listen(c => { log('Befehl vom Handy (ntfy):', c); handleCmd(c); });
   /* Neuer Lotse voraus + ATIS am Ziel: Online-Lotsen und ATIS (VATSIM, alle 60 s), Prüfung alle 30 s */
