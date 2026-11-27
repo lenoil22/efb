@@ -228,7 +228,8 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
         if (!on) st.warnPending = 0;
         st.warn = on;
       } else if (role === 'caution') {
-        if (on && !st.caut && cool('caut', 30000)) notify({ kind: 'caution', title: 'Master Caution', message: 'Im Cockpit leuchtet Master Caution.', priority: 4, tags: ['warning'] });
+        // nur in der Luft: beim Startup am Gate leuchtet Master Caution oft kurz auf; höchstens alle 2 min
+        if (on && !st.caut && st.onGround === false && cool('caut', 120000)) notify({ kind: 'caution', title: 'Master Caution', message: 'Im Cockpit leuchtet Master Caution.', priority: 4, tags: ['warning'] });
         st.caut = on;
       } else st[role] = on;
     }
@@ -243,7 +244,7 @@ export function makeMonitor({ cfg, notify, now = () => Date.now() }) {
     // Master Warning (verzögert): nicht doppelt, wenn sie nur vom AP-Disconnect kommt
     if (st.warnPending && t - st.warnPending >= 3000) {
       const fromAp = st.apOffAt && Math.abs(st.warnPending - st.apOffAt) < 6000;
-      if (st.warn && !fromAp && cool('warn', 30000)) notify({ kind: 'warning', title: 'MASTER WARNING', message: 'Im Cockpit leuchtet Master Warning. Sofort an den PC.', priority: 5, tags: ['rotating_light'] });
+      if (st.warn && !fromAp && st.onGround === false && cool('warn', 30000)) notify({ kind: 'warning', title: 'MASTER WARNING', message: 'Im Cockpit leuchtet Master Warning. Sofort an den PC.', priority: 5, tags: ['rotating_light'] });
       st.warnPending = 0;
     }
     // Pause in der Luft
