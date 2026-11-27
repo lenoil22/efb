@@ -18,7 +18,7 @@ const ANF_FILE = path.join(DIR, 'anflug-werte.txt');   // Rohwerte für den Anfl
 export const DEFAULTS = {
   ntfyServer: 'https://ntfy.sh',
   topic: '',                 // geheimer Kanalname – wird beim ersten Start erzeugt
-  simbriefUser: 'OnboardTransponder595',
+  simbriefUser: '',          // SimBrief-Name steht nur in der lokalen config.json (Repo ist öffentlich)
   wsUrl: 'ws://localhost:2048/fsuipc/',
   todLeadMin: 5,             // TOD-Alarm so viele Minuten vorher
   awayMin: 25,               // Weg-Modus: Alarm nach so vielen Minuten (VATSIM: max. 30)
@@ -502,33 +502,39 @@ export function makeLogbook({ file = path.join(DIR, 'logbook.json'), notify, now
   let list = [];
   try { list = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { }
   let f = null, wasGround = null, td = null, still = 0;
+  /* Der laufende Flug liegt zusätzlich in logbook-current.json: Neustart oder Absturz der Bridge im Flug
+     verliert ihn nicht mehr (vorher fehlte dann der ganze Flug). Älter als 12 h → verworfen. */
+  const curFile = file.replace(/\.json$/, '') + '-current.json';
+  try { const c = JSON.parse(fs.readFileSync(curFile, 'utf8')); if (c?.f && now() - (c.saved || 0) < 12 * 3600000) f = c.f; } catch { }
+  const saveCur = () => { try { if (f) fs.writeFileSync(curFile, JSON.stringify({ f, saved: now() })); else fs.rmSync(curFile, { force: true }); } catch { } };
   const save = () => { try { fs.writeFileSync(file, JSON.stringify(list, null, 1)); } catch { } onChange?.(list); };
-  const start = st => { const p = plan(); f = { id: now().toString(36), date: new Date(now()).toISOString(), cs: p.cs || '', type: p.type || '', dep: p.dep || '', arr: p.arr || '', offBlock: now(), fuelOutLbs: st.fuelLbs ?? null }; };
+  const start = (st, partial) => { const p = plan(); f = { id: now().toString(36), date: new Date(now()).toISOString(), cs: p.cs || '', type: p.type || '', dep: p.dep || '', arr: p.arr || '', offBlock: partial ? null : now(), fuelOutLbs: partial ? null : st.fuelLbs ?? null, ...(partial ? { partial: true } : {}) }; saveCur(); };
   function update(st) {
     if (st.lat == null || !st.simSeen) return;
     const t = now(), g = !!st.onGround;
+    if (!f && wasGround === null && !g && st.gsKt > 80) start(st, true);   // Bridge startet in der Luft ohne gesicherten Flug → Teilflug, damit die Landung zählt
     if (!f && g && st.gsKt > 3) start(st);                                  // rollt los → Off-Block
-    if (wasGround === true && !g && st.gsKt > 40) { if (!f) start(st); if (!f.takeoff) f.takeoff = t; }     // abgehoben
-    if (wasGround === false && g && f && f.takeoff && !td) td = { t, vs: st.tdVs ?? st.vsFpm ?? 0, g: st.g ?? 1, bounces: 0 };   // aufgesetzt
+    if (wasGround === true && !g && st.gsKt > 40) { if (!f) start(st); if (!f.takeoff) { f.takeoff = t; saveCur(); } }     // abgehoben
+    if (wasGround === false && g && f && (f.takeoff || f.partial) && !td) td = { t, vs: st.tdVs ?? st.vsFpm ?? 0, g: st.g ?? 1, bounces: 0 };   // aufgesetzt
     if (td && !f.landing) {
       if (t - td.t <= 3500) {
         td.g = Math.max(td.g, st.g ?? 1); if (st.tdVs != null) td.vs = st.tdVs;
         if (!g && !td.air) { td.bounces++; td.air = true; } if (g) td.air = false;
       }
       else {
-        f.landing = td.t; f.fpm = -Math.abs(Math.round(td.vs)); f.g = Math.round(td.g * 100) / 100; f.bounces = td.bounces; f.grade = grade(f.fpm);
-        const ft = Math.round((f.landing - f.takeoff) / 60000);
-        notify({ kind: 'landing', title: `Gelandet${f.arr ? ' in ' + f.arr : ''} · ${f.fpm} fpm`, message: `${f.grade} · ${f.g.toFixed(2)} G${f.bounces ? ' · ' + f.bounces + '× gesprungen' : ''} · Flugzeit ${Math.floor(ft / 60)}:${String(ft % 60).padStart(2, '0')}`, priority: 3, tags: ['airplane_arriving'] });
+        f.landing = td.t; f.fpm = -Math.abs(Math.round(td.vs)); f.g = Math.round(td.g * 100) / 100; f.bounces = td.bounces; f.grade = grade(f.fpm); saveCur();
+        const ft = f.takeoff ? Math.round((f.landing - f.takeoff) / 60000) : null;
+        notify({ kind: 'landing', title: `Gelandet${f.arr ? ' in ' + f.arr : ''} · ${f.fpm} fpm`, message: `${f.grade} · ${f.g.toFixed(2)} G${f.bounces ? ' · ' + f.bounces + '× gesprungen' : ''}${ft != null ? ` · Flugzeit ${Math.floor(ft / 60)}:${String(ft % 60).padStart(2, '0')}` : ''}`, priority: 3, tags: ['airplane_arriving'] });
       }
     }
     if (f && f.landing) {                                                    // steht 30 s → On-Block, Flug speichern
       still = st.gsKt < 1 ? (still || t) : 0;
-      if (still && t - still > 30000) { f.onBlock = t; f.fuelInLbs = st.fuelLbs ?? null; list.unshift(f); list = list.slice(0, 200); f = null; td = null; still = 0; save(); }
+      if (still && t - still > 30000) { f.onBlock = t; f.fuelInLbs = st.fuelLbs ?? null; list.unshift(f); list = list.slice(0, 200); f = null; td = null; still = 0; save(); saveCur(); }
     }
     wasGround = g;
   }
-  /* Bridge wird beendet: angefangenen Flug trotzdem sichern, wenn gelandet */
-  function flush() { if (f && f.landing) { f.onBlock = now(); list.unshift(f); f = null; save(); } }
+  /* Bridge wird beendet: gelandeten Flug sichern; ein noch laufender Flug bleibt in logbook-current.json und geht nach dem Neustart weiter */
+  function flush() { if (f && f.landing) { f.onBlock = now(); list.unshift(f); f = null; save(); saveCur(); } }
   return { update, flush, list: () => list, current: () => f };
 }
 

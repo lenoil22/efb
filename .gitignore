@@ -6,6 +6,7 @@ bridge/bridge.log
 bridge/vatspy-cache/
 bridge/runway-cache/
 bridge/logbook.json
+bridge/logbook-current.json
 bridge/vpilot/*.dll
 bridge/EFB-Bridge.exe
 bridge/app/efb.ico

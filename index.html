@@ -214,7 +214,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='efb.v1';
 const blank=()=>({cs:'',type:'',dep:'',arr:'',altn:'',gate:'',arrGate:'',crz:'',route:'',sid:'',star:'',exitFix:'',depRwy:'',arrRwy:'',squawk:'',atisDep:'',atisArr:'',qnhDep:'',qnhArr:'',clearedAlt:'',passing:'',nextFix:'',hdg:'',appType:'ILS',climb:'',climbMode:'sid',ta:'',tl:'',tod:'',fuel:'',trim:'',flaps:'',vspeeds:'',mins:'',clrType:'sid',wps:[],depPos:null,arrPos:null,depElev:'',arrElev:''});
-let S={user:'OnboardTransponder595',f:blank(),phase:'boden',mem:{},ck:{},tab:'flug',req:null,sp:false};
+let S={user:'',f:blank(),phase:'boden',mem:{},ck:{},tab:'flug',req:null,sp:false};
 try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s)S={...S,...s,f:{...blank(),...s.f}}}catch(e){}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 const F=()=>S.f;
