@@ -108,7 +108,15 @@ input:focus{outline:2px solid var(--cyan);outline-offset:1px}
 /* Listen (Alarme, Verlauf, Einrichtung) */
 .list{padding:2px 16px}
 .it{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 0;border-top:1px solid var(--line);width:100%;text-align:left}
-.it.neu{background:rgba(76,201,240,.07);margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:10px}
+.it.unread{background:rgba(255,255,255,.07);margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:12px;cursor:pointer;transition:transform .1s ease-out}
+.it.unread:active{transform:scale(.985)}
+.it.unread .tx b{color:#fff}
+.it.unread .tx b::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--cyan);margin-right:7px;vertical-align:1px}
+.it.unread:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.sec.gh{width:100%;min-height:44px;align-items:center;cursor:pointer}
+.sec.gh .chev{width:16px;height:16px;margin-left:6px;vertical-align:-3px;color:var(--t3);transform:rotate(90deg);transition:transform .15s ease-out}
+.sec.gh:not(.open) .chev{transform:rotate(0deg)}
+.sec.gh[aria-disabled] .chev{opacity:.35}
 .curhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:6px}.curhead b{font-size:18px}.curhead span{font:600 13px var(--mono);color:var(--t2)}
 .neu-n{color:var(--cyan)}
 .it .acts{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
@@ -314,7 +322,7 @@ section{animation:in .18s ease-out}
 <!-- ===================== VERLAUF ===================== -->
 <section id="t-verlauf" class="hide">
   <div class="lt">Verlauf</div>
-  <p class="note">Oben der aktuelle Flug, nach Art sortiert. Blau hinterlegt = neu, seit du zuletzt hier warst.</p>
+  <p class="note">Oben der aktuelle Flug, nach Art sortiert. Hell mit Punkt = ungelesen – einmal antippen, dann ist sie gelesen. Pfeil klappt eine Gruppe zu.</p>
   <div id="hist" style="margin-top:14px"></div>
 </section>
 
@@ -467,13 +475,13 @@ function renderAlarme(){
   $('#alarmBody').innerHTML=h;
 }
 /* Verlauf: oben „Aktueller Flug“ (seit dem letzten On-Block), gruppiert; ältere Flüge eingeklappt.
-   Jede Meldung ist erst „ungelesen“ (blau, Knopf „Gelesen“), danach „gelesen“ (Knopf „Ausblenden“).
-   Ausgeblendete liegen unten zum Einblenden. Ungelesene werden nie ausgeblendet, auch nicht bei eingeschaltetem Ausblenden.
-   Gespeichert nur auf diesem Gerät (localStorage efb.read / efb.hid). */
+   Ungelesene Meldungen sind heller hervorgehoben; einmal antippen = gelesen. Gelesene lassen sich einzeln ausblenden
+   (unten „Ausgeblendet“ zum Einblenden). Kategorien klappen per Pfeil auf/zu; mit Ungelesenem sind sie immer offen.
+   Gespeichert nur auf diesem Gerät (localStorage efb.read / efb.hid / efb.col). */
 const VGRP=[['Lotsen-Nachrichten',['contact','sector','vatsim']],['METAR & ATIS',[]],['Anflug & Landung',['energy','landing','away','tod']],['Warnungen & Cockpit',['warning','caution','ap','pause','crash','fuel']],['Sonstiges',[]]];
 const vgroup=x=>{if(x.kind==='atis'&&/^(ATIS|METAR)/.test(x.title))return'METAR & ATIS';for(const[n,ks]of VGRP)if(ks.includes(x.kind))return n;return'Sonstiges'};
-const RDS=()=>{try{return JSON.parse(localStorage.getItem('efb.read')||'{}')}catch(e){return{}}};
-const HDS=()=>{try{return JSON.parse(localStorage.getItem('efb.hid')||'{}')}catch(e){return{}}};
+const LS=(k)=>{try{return JSON.parse(localStorage.getItem(k)||'{}')}catch(e){return{}}};
+const RDS=()=>LS('efb.read'),HDS=()=>LS('efb.hid'),COLS=()=>LS('efb.col');
 const setS=(k,o)=>{try{localStorage.setItem(k,JSON.stringify(o))}catch(e){}};
 /* Einmalig: alles, was es bei der Einführung schon gab, gilt als gelesen */
 function initRead(){
@@ -481,16 +489,16 @@ function initRead(){
 }
 const isUnread=(x,rd)=>!rd[x.id]&&x.kind!=='info';
 function vItem(x,rd,m){                                                  // m: 'hid' = ausgeblendet, 'old' = früherer Flug
-  const v=KIND[x.kind]||KIND.info,how=x.mode===2?'als Wecker':x.mode===1?'als Nachricht':'nur im Verlauf',unread=isUnread(x,rd);
+  const v=KIND[x.kind]||KIND.info,how=x.mode===2?'als Wecker':x.mode===1?'als Nachricht':'nur im Verlauf',unread=isUnread(x,rd)&&m!=='old';
   const msg=x.msg&&['contact','atis','landing','fuel','crash','vatsim','sector','tod','energy'].includes(x.kind)?`<span class="msg">${esc(x.msg)}</span>`:'';
   const acts=(x.from?`<button class="rbtn" data-reply="${esc(x.id)}">Antworten</button>`:'')+
-    (m==='old'?'':m==='hid'?`<button class="xbtn" data-show="${esc(x.id)}">Einblenden</button>`:unread?`<button class="xbtn ok" data-read="${esc(x.id)}">Gelesen</button>`:x.kind!=='info'?`<button class="xbtn" data-hide="${esc(x.id)}">Ausblenden</button>`:'');
-  return`<div class="it${unread?' neu':''}" data-hid="${esc(x.id)}">${icon(v[1],v[2])}<div class="tx"><b>${esc(x.title)}</b>${msg}<span class="meta">${how}</span></div>`+
+    (m==='old'?'':m==='hid'?`<button class="xbtn" data-show="${esc(x.id)}">Einblenden</button>`:!unread&&x.kind!=='info'?`<button class="xbtn" data-hide="${esc(x.id)}">Ausblenden</button>`:'');
+  return`<div class="it${unread?' unread':''}"${unread?` data-mark="${esc(x.id)}" role="button" tabindex="0" aria-label="${esc(x.title)} – antippen: gelesen"`:''} data-hid="${esc(x.id)}">${icon(v[1],v[2])}<div class="tx"><b>${esc(x.title)}</b>${msg}<span class="meta">${how}${unread?' · neu':''}</span></div>`+
     `<div class="acts"><span class="tm">${hm(x.t)}</span>${acts}</div></div>`;
 }
 function renderVerlauf(){
   initRead();
-  const all=S.history||[],rd=RDS(),hd=HDS(),lastOB=Math.max(0,...(S.logbook||[]).map(f=>f.onBlock||0));
+  const all=S.history||[],rd=RDS(),hd=HDS(),col=COLS(),lastOB=Math.max(0,...(S.logbook||[]).map(f=>f.onBlock||0));
   const cur=all.filter(x=>x.t>lastOB).sort((a,b)=>b.t-a.t), old=all.filter(x=>x.t<=lastOB).slice(-40).reverse();
   const shown=cur.filter(x=>!hd[x.id]||isUnread(x,rd));                       // ungelesen bleibt immer sichtbar
   const hidden=cur.filter(x=>hd[x.id]&&!isUnread(x,rd));
@@ -500,8 +508,9 @@ function renderVerlauf(){
   if(!cur.length)h+=`<div class="card list"><div class="it"><div class="tx"><span>Im aktuellen Flug noch keine Meldungen.</span></div></div></div>`;
   for(const[n]of VGRP){
     const items=shown.filter(x=>vgroup(x)===n);if(!items.length)continue;
-    const un=items.filter(x=>isUnread(x,rd)).length;
-    h+=`<div class="sec"><span class="eyebrow">${n}</span><span>${items.length}${un?` · ${un} ungelesen`:''}</span></div><div class="card list">${items.map(x=>vItem(x,rd)).join('')}</div>`;
+    const un=items.filter(x=>isUnread(x,rd)).length,open=un>0||!col[n];        // mit Ungelesenem immer offen
+    h+=`<button class="sec gh${open?' open':''}" data-grp="${esc(n)}" aria-expanded="${open}"${un?' aria-disabled="true"':''}><span class="eyebrow">${n}</span><span>${items.length}${un?` · ${un} ungelesen`:''}<svg class="chev"><use href="#i-chev"/></svg></span></button>`+
+      (open?`<div class="card list">${items.map(x=>vItem(x,rd)).join('')}</div>`:'');
   }
   if(hidden.length)h+=`<details class="old"><summary>Ausgeblendet (${hidden.length})</summary><div class="card list">${hidden.map(x=>vItem(x,rd,'hid')).join('')}</div></details>`;
   if(old.length)h+=`<details class="old"><summary>Frühere Flüge (${old.length})</summary><div class="card list">${old.map(x=>vItem(x,rd,'old')).join('')}</div></details>`;
@@ -586,7 +595,8 @@ document.addEventListener('click',e=>{
   if(b=e.target.closest('[data-spick]')){if(APP)b.dataset.spick==='sys'?APP.pickSystem(SND):APP.pickFile(SND);return}
   if(e.target.closest('[data-sclose]')){closeSound();return}
   /* Verlauf: gelesen / ausblenden / einblenden (nur auf diesem Gerät) */
-  if(b=e.target.closest('[data-read]')){const r=RDS();r[b.dataset.read]=1;setS('efb.read',r);renderVerlauf();return}
+  if(b=e.target.closest('[data-grp]')){if(b.getAttribute('aria-disabled'))return;const c=COLS(),n=b.dataset.grp;c[n]=!c[n];setS('efb.col',c);renderVerlauf();return}
+  if((b=e.target.closest('.it[data-mark]'))&&!e.target.closest('button')){const r=RDS();r[b.dataset.mark]=1;setS('efb.read',r);renderVerlauf();return}
   if(b=e.target.closest('[data-readall]')){const r=RDS();(S.history||[]).forEach(x=>r[x.id]=1);setS('efb.read',r);renderVerlauf();return}
   if(b=e.target.closest('[data-hide]')){const x=HDS();x[b.dataset.hide]=1;setS('efb.hid',x);renderVerlauf();return}
   if(b=e.target.closest('[data-show]')){const x=HDS();delete x[b.dataset.show];setS('efb.hid',x);renderVerlauf();return}
@@ -607,6 +617,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest('#unpair')){if(APP)APP.setTopic('');else{location.hash='';localStorage.removeItem('efb.topic');S.topic=''}TAB='flug';load();return}
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
+/* Verlauf: ungelesene Meldung per Tastatur (Enter/Leertaste) als gelesen markieren */
+document.addEventListener('keydown',e=>{const it=e.target.closest&&e.target.closest('.it[data-mark]');if(it&&(e.key==='Enter'||e.key===' ')){e.preventDefault();it.click()}});
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='replyIn')reply(e.target.value);if(e.key==='Escape'&&SHEET){SHEET=null;renderSheet()}if(e.key==='Escape'&&SND)closeSound()});
 window.efbStatus=()=>S.status;
 load();browserListen();
