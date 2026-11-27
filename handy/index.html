@@ -108,6 +108,11 @@ input:focus{outline:2px solid var(--cyan);outline-offset:1px}
 /* Listen (Alarme, Verlauf, Einrichtung) */
 .list{padding:2px 16px}
 .it{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 0;border-top:1px solid var(--line);width:100%;text-align:left}
+.it.neu{background:rgba(76,201,240,.07);margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:10px}
+.curhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:6px}.curhead b{font-size:18px}.curhead span{font:600 13px var(--mono);color:var(--t2)}
+.neu-n{color:var(--cyan)}
+details.old{margin-top:18px}details.old summary{cursor:pointer;font-size:13px;color:var(--t2);padding:10px 4px;min-height:44px;display:flex;align-items:center}
+details.old .card{margin-top:6px}
 .it:first-child{border-top:0}
 button.it:active{opacity:.7}
 .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
@@ -306,8 +311,8 @@ section{animation:in .18s ease-out}
 <!-- ===================== VERLAUF ===================== -->
 <section id="t-verlauf" class="hide">
   <div class="lt">Verlauf</div>
-  <p class="note">Alle Meldungen vom PC, neueste oben.</p>
-  <div class="card list" id="hist" style="margin-top:14px"></div>
+  <p class="note">Oben der aktuelle Flug, nach Art sortiert. Blau hinterlegt = neu, seit du zuletzt hier warst.</p>
+  <div id="hist" style="margin-top:14px"></div>
 </section>
 
 <nav class="tabs" aria-label="Bereiche">
@@ -458,14 +463,32 @@ function renderAlarme(){
      `<div style="height:10px"></div><button class="ghost" id="unpair" style="color:var(--t2)">Anderen Kanal eingeben</button>`;
   $('#alarmBody').innerHTML=h;
 }
+/* Verlauf: oben „Aktueller Flug“ (seit der letzten Landung/On-Block), gruppiert; ältere Flüge eingeklappt.
+   „neu“ = seit dem letzten Öffnen dieses Tabs (localStorage efb.seen, nur auf diesem Gerät). */
+const VGRP=[['Lotsen',['contact','atis','sector','vatsim']],['Anflug & Landung',['energy','landing','away','tod']],['Warnungen & Cockpit',['warning','caution','ap','pause','crash','fuel']],['Sonstiges',[]]];
+const vgroup=k=>{for(const[n,ks]of VGRP)if(ks.includes(k))return n;return 'Sonstiges'};
+function vItem(x,seen){
+  const v=KIND[x.kind]||KIND.info,how=x.mode===2?'als Wecker':x.mode===1?'als Nachricht':'nur im Verlauf',neu=x.t>seen&&x.kind!=='info';
+  const msg=x.msg&&['contact','atis','landing','fuel','crash','vatsim','sector','tod','energy'].includes(x.kind)?`<span class="msg">${esc(x.msg)}</span>`:'';
+  return`<div class="it${neu?' neu':''}" data-hid="${esc(x.id)}">${icon(v[1],v[2])}<div class="tx"><b>${esc(x.title)}</b>${msg}<span class="meta">${how}</span></div>`+
+    (x.from?`<button class="rbtn" data-reply="${esc(x.id)}">Antworten</button>`:`<span class="tm">${hm(x.t)}</span>`)+'</div>';
+}
 function renderVerlauf(){
-  const h=(S.history||[]).slice(-40).reverse();
-  $('#hist').innerHTML=h.length?h.map(x=>{const v=KIND[x.kind]||KIND.info,how=x.mode===2?'als Wecker':x.mode===1?'als Nachricht':'nur im Verlauf';
-    const msg=x.msg&&['contact','atis','landing','fuel','crash','vatsim','sector','tod'].includes(x.kind)?`<span class="msg">${esc(x.msg)}</span>`:'';
-    return`<div class="it" data-hid="${esc(x.id)}">${icon(v[1],v[2])}<div class="tx"><b>${esc(x.title)}</b>${msg}<span class="meta">${how}</span></div>`+
-      (x.from?`<button class="rbtn" data-reply="${esc(x.id)}">Antworten</button>`:`<span class="tm">${hm(x.t)}</span>`)+'</div>'}).join('')
-    :'<div class="it"><div class="tx"><span>Noch keine Meldungen.</span></div></div>';
-  const seen=+localStorage.getItem('efb.seen')||0,neu=(S.history||[]).filter(x=>x.t>seen&&x.kind!=='info').length;
+  const all=S.history||[],seen=+localStorage.getItem('efb.seen')||0;
+  const lastOB=Math.max(0,...(S.logbook||[]).map(f=>f.onBlock||0));          // letzter abgeschlossener Flug
+  const cur=all.filter(x=>x.t>lastOB).sort((a,b)=>b.t-a.t), old=all.filter(x=>x.t<=lastOB).slice(-40).reverse();
+  const imp=cur.filter(x=>x.kind!=='info'), neuN=imp.filter(x=>x.t>seen).length;
+  let h=`<div class="curhead"><b>Aktueller Flug</b><span>${esc(S.status?.arr?'Ziel '+S.status.arr:'')}</span></div>`;
+  h+=`<p class="sub">${imp.length} Meldungen${neuN?` · <b class="neu-n">${neuN} neu</b>`:''}${lastOB?'':' · noch kein Flug abgeschlossen'}</p>`;
+  if(!cur.length)h+=`<div class="card list"><div class="it"><div class="tx"><span>Im aktuellen Flug noch keine Meldungen.</span></div></div></div>`;
+  for(const[n]of VGRP){
+    const items=cur.filter(x=>vgroup(x.kind)===n);if(!items.length)continue;
+    const neu=items.filter(x=>x.t>seen).length;
+    h+=`<div class="sec"><span class="eyebrow">${n}</span><span>${items.length}${neu?` · ${neu} neu`:''}</span></div><div class="card list">${items.map(x=>vItem(x,seen)).join('')}</div>`;
+  }
+  if(old.length)h+=`<details class="old"><summary>Frühere Flüge (${old.length})</summary><div class="card list">${old.map(x=>vItem(x,seen)).join('')}</div></details>`;
+  $('#hist').innerHTML=h;
+  const neu=all.filter(x=>x.t>seen&&x.kind!=='info').length;
   const b=$('#badge');b.textContent=neu>9?'9+':neu;b.classList.toggle('hide',!neu||TAB==='verlauf');
   if(TAB==='verlauf')localStorage.setItem('efb.seen',Date.now());
 }
